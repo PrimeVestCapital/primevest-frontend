@@ -125,35 +125,35 @@ async function apiFetch(endpoint, options = {}, retry = true) {
 
 // ─── Auth API ────────────────────────────────────────────────────────
 export const authApi = {
-  register: (data) => apiFetch("/auth/register", { method: "POST", body: data }),
-  login: (data) => apiFetch("/auth/login", { method: "POST", body: data }),
-  logout: (refreshToken) => apiFetch("/auth/logout", { method: "POST", body: { refreshToken } }),
-  refresh: (refreshToken) => apiFetch("/auth/refresh", { method: "POST", body: { refreshToken } }),
+  register: (data) => apiFetch("/api/auth/register", { method: "POST", body: data }),
+  login: (data) => apiFetch("/api/auth/login", { method: "POST", body: data }),
+  logout: (refreshToken) => apiFetch("/api/auth/logout", { method: "POST", body: { refreshToken } }),
+  refresh: (refreshToken) => apiFetch("/api/auth/refresh", { method: "POST", body: { refreshToken } }),
 };
 
 // ─── User API ────────────────────────────────────────────────────────
 export const userApi = {
-  getMe: () => apiFetch("/users/me"),
+  getMe: () => apiFetch("/api/users/me"),
   getTransactions: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
-    return apiFetch(`/users/transactions${qs ? `?${qs}` : ""}`);
+    return apiFetch(`/api/users/transactions${qs ? `?${qs}` : ""}`);
   },
-  withdraw: (data) => apiFetch("/users/withdraw", { method: "POST", body: data }),
-  updateProfile: (data) => apiFetch("/users/profile", { method: "PUT", body: data }),
+  withdraw: (data) => apiFetch("/api/users/withdraw", { method: "POST", body: data }),
+  updateProfile: (data) => apiFetch("/api/users/profile", { method: "PUT", body: data }),
 };
 
 // ─── Admin API ───────────────────────────────────────────────────────
 export const adminApi = {
-  getDashboard: () => apiFetch("/admin/dashboard"),
+  getDashboard: () => apiFetch("/api/admin/dashboard"),
   getUsers: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
-    return apiFetch(`/admin/users${qs ? `?${qs}` : ""}`);
+    return apiFetch(`/api/admin/users${qs ? `?${qs}` : ""}`);
   },
-  getUser: (id) => apiFetch(`/admin/users/${id}`),
-  updatePortfolio: (id, data) => apiFetch(`/admin/users/${id}/portfolio`, { method: "PUT", body: data }),
-  deposit: (id, data) => apiFetch(`/admin/users/${id}/deposit`, { method: "POST", body: data }),
-  creditProfit: (id, data) => apiFetch(`/admin/users/${id}/credit-profit`, { method: "POST", body: data }),
-  notify: (data) => apiFetch("/admin/notify", { method: "POST", body: data }),
-  getNotifications: () => apiFetch("/admin/notifications"),
-  setUserStatus: (id, isActive) => apiFetch(`/admin/users/${id}/status`, { method: "PUT", body: { isActive } }),
+  getUser: (id) => apiFetch(`/api/admin/users/${id}`),
+  updatePortfolio: (id, data) => apiFetch(`/api/admin/users/${id}/portfolio`, { method: "PUT", body: data }),
+  deposit: (id, data) => apiFetch(`/api/admin/users/${id}/deposit`, { method: "POST", body: data }),
+  creditProfit: (id, data) => apiFetch(`/api/admin/users/${id}/credit-profit`, { method: "POST", body: data }),
+  notify: (data) => apiFetch("/api/admin/notify", { method: "POST", body: data }),
+  getNotifications: () => apiFetch("/api/admin/notifications"),
+  setUserStatus: (id, isActive) => apiFetch(`/api/admin/users/${id}/status`, { method: "PUT", body: { isActive } }),
 };
