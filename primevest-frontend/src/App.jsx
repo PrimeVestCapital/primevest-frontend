@@ -265,7 +265,7 @@ function AuthPage({ onLogin, toast }) {
     if (!form.email || !form.password) { setErr("Email and password are required."); return; }
     setLoading(true);
     try {
-      const data = await apiFetch("/auth/login", { method: "POST", body: { email: form.email, password: form.password } });
+      const data = await apiFetch("/api/auth/login", { method: "POST", body: { email: form.email, password: form.password } });
       tokenStore.set(data.data.accessToken, data.data.refreshToken);
       onLogin(data.data.user);
     } catch (e) {
