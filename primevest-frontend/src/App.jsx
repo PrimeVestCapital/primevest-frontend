@@ -283,7 +283,7 @@ function AuthPage({ onLogin, toast }) {
     if (!/^\d{4}$/.test(form.pin)) { setErr("PIN must be exactly 4 digits."); return; }
     setLoading(true);
     try {
-      const data = await apiFetch("/auth/register", {
+      const data = await apiFetch("/api/auth/register", {
         method: "POST",
         body: { name: form.name, email: form.email, password: form.password, pin: form.pin },
       });
@@ -407,7 +407,7 @@ function UserDashboard({ user: initialUser, onLogout, toast }) {
   const confirmWithdraw = async (pin) => {
     setWithdrawLoading(true);
     try {
-      const res = await apiFetch("/users/withdraw", {
+      const res = await apiFetch("/api/users/withdraw", {
         method: "POST",
         body: { amount: pendingWithdraw, pin },
       });
@@ -678,8 +678,8 @@ function AdminDashboard({ onLogout, toast }) {
     setLoading(true);
     try {
       const [dashRes, usersRes] = await Promise.all([
-        apiFetch("/admin/dashboard"),
-        apiFetch("/admin/users"),
+        apiFetch("/api/admin/dashboard"),
+        apiFetch("/api/admin/users"),
       ]);
       setStats(dashRes.data.stats);
       setUsers(usersRes.data);
@@ -702,7 +702,7 @@ function AdminDashboard({ onLogout, toast }) {
     if (!selected) return;
     setSaveLoading(true);
     try {
-      const res = await apiFetch(`/admin/users/${selected}/portfolio`, {
+      const res = await apiFetch(`/api/admin/users/${selected}/portfolio`, {
         method: "PUT",
         body: { balance: editForm.balance, profit: editForm.profit, plan: editForm.plan },
       });
@@ -723,7 +723,7 @@ function AdminDashboard({ onLogout, toast }) {
     if (!msgForm.subject || !msgForm.body) { toast("Error", "Subject and message are required.", "error"); return; }
     setNotifyLoading(true);
     try {
-      const res = await apiFetch("/admin/notify", {
+      const res = await apiFetch("/api/admin/notify", {
         method: "POST",
         body: { userId: msgForm.userId === "all" ? "all" : msgForm.userId, subject: msgForm.subject, body: msgForm.body },
       });
@@ -945,13 +945,13 @@ export default function App() {
       const accessToken = tokenStore.getAccess();
       if (!accessToken) { setBootstrapping(false); return; }
       try {
-        const res = await apiFetch("/users/me");
+        const res = await apiFetch("/api/users/me");
         setSession(res.data);
       } catch (e) {
         if (e.message !== "SESSION_EXPIRED") {
           // Try admin check
           try {
-            const adminRes = await apiFetch("/admin/dashboard");
+            const adminRes = await apiFetch("/api/admin/dashboard");
             if (adminRes.success) setSession({ role: "admin" });
           } catch {
             tokenStore.clear();
@@ -973,7 +973,7 @@ export default function App() {
   const handleLogout = useCallback(async () => {
     try {
       const refreshToken = tokenStore.getRefresh();
-      await apiFetch("/auth/logout", { method: "POST", body: { refreshToken } });
+      await apiFetch("/api/auth/logout", { method: "POST", body: { refreshToken } });
     } catch (_) {}
     tokenStore.clear();
     setSession(null);
