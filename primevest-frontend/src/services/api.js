@@ -46,25 +46,35 @@ function normalizeDates(obj) {
     return obj.map(normalizeDates);
   }
 
-  const dateKeys = [
-    "created_at",
-    "updated_at",
-    "join_date",
-    "date",
-    "createdAt",
-    "updatedAt",
-  ];
+  const result = {};
 
-  const result = { ...obj };
+  for (const key in obj) {
+    let value = obj[key];
 
-  for (const key in result) {
-    const value = result[key];
-
-    if (dateKeys.includes(key)) {
-      result[key] = safeDate(value);
-    } else if (typeof value === "object") {
-      result[key] = normalizeDates(value);
+    // recursively normalize nested objects
+    if (typeof value === "object" && value !== null) {
+      value = normalizeDates(value);
     }
+
+    // normalize dates
+    if (
+      [
+        "created_at",
+        "updated_at",
+        "join_date",
+        "date",
+        "createdAt",
+        "updatedAt",
+        "joinDate",
+      ].includes(key)
+    ) {
+      value = safeDate(value);
+    }
+
+    // convert snake_case -> camelCase
+    const camelKey = key.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+
+    result[camelKey] = value;
   }
 
   return result;
