@@ -1,4 +1,4 @@
-// src/services/api.js – Centralised API service with auto token refresh
+// src/services/api.js – Centralised API service with auto token refresh + safe date handling
 "use strict";
 
 const BASE_URL = import.meta?.env?.VITE_API_URL || "http://localhost:5000";
@@ -20,7 +20,7 @@ export const tokenStore = {
   },
 };
 
-// ─── Core Fetch Wrapper ─────────────────────────────────────────────
+// ─── Refresh queue handling ────────────────────────────────────────
 let isRefreshing = false;
 let refreshQueue = [];
 
@@ -32,6 +32,45 @@ async function processQueue(error, token) {
   refreshQueue = [];
 }
 
+// ─── SAFE DATE HANDLING ────────────────────────────────────────────
+function safeDate(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  return isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+function normalizeDates(obj) {
+  if (!obj || typeof obj !== "object") return obj;
+
+  if (Array.isArray(obj)) {
+    return obj.map(normalizeDates);
+  }
+
+  const dateKeys = [
+    "created_at",
+    "updated_at",
+    "join_date",
+    "date",
+    "createdAt",
+    "updatedAt",
+  ];
+
+  const result = { ...obj };
+
+  for (const key in result) {
+    const value = result[key];
+
+    if (dateKeys.includes(key)) {
+      result[key] = safeDate(value);
+    } else if (typeof value === "object") {
+      result[key] = normalizeDates(value);
+    }
+  }
+
+  return result;
+}
+
+// ─── Core Fetch Wrapper ─────────────────────────────────────────────
 async function apiFetch(endpoint, options = {}, retry = true) {
   const url = `${BASE_URL}${endpoint}`;
   const accessToken = tokenStore.getAccess();
@@ -50,18 +89,19 @@ async function apiFetch(endpoint, options = {}, retry = true) {
   }
 
   let response;
+
   try {
     response = await fetch(url, config);
   } catch (networkErr) {
     throw new Error("Network error. Please check your connection.");
   }
 
-  // Handle 401 with token refresh
+  // ─── Handle expired token ───────────────────────────────────────
   if (response.status === 401 && retry) {
     const data = await response.json().catch(() => ({}));
+
     if (data.code === "TOKEN_EXPIRED") {
       if (isRefreshing) {
-        // Queue this request until refresh completes
         return new Promise((resolve, reject) => {
           refreshQueue.push({ resolve, reject });
         }).then((newToken) => {
@@ -80,7 +120,7 @@ async function apiFetch(endpoint, options = {}, retry = true) {
       }
 
       try {
-        const refreshResponse = await fetch(`${BASE_URL}/auth/refresh`, {
+        const refreshResponse = await fetch(`${BASE_URL}/api/auth/refresh`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ refreshToken }),
@@ -96,8 +136,10 @@ async function apiFetch(endpoint, options = {}, retry = true) {
         }
 
         const { accessToken: newAccess, refreshToken: newRefresh } = refreshData.data;
+
         tokenStore.set(newAccess, newRefresh);
         processQueue(null, newAccess);
+
         config.headers.Authorization = `Bearer ${newAccess}`;
         return apiFetch(endpoint, options, false);
       } catch (err) {
@@ -111,7 +153,10 @@ async function apiFetch(endpoint, options = {}, retry = true) {
     throw new Error(data.message || "Authentication required.");
   }
 
-  const responseData = await response.json().catch(() => ({ success: false, message: "Invalid server response." }));
+  const responseData = await response.json().catch(() => ({
+    success: false,
+    message: "Invalid server response.",
+  }));
 
   if (!response.ok) {
     const err = new Error(responseData.message || `Request failed: ${response.status}`);
@@ -120,26 +165,31 @@ async function apiFetch(endpoint, options = {}, retry = true) {
     throw err;
   }
 
-  return responseData;
+  // ─── GLOBAL FIX: normalize ALL dates ───────────────────────────
+  return normalizeDates(responseData);
 }
 
-// ─── Auth API ────────────────────────────────────────────────────────
+// ─── Auth API ───────────────────────────────────────────────────────
 export const authApi = {
   register: (data) => apiFetch("/api/auth/register", { method: "POST", body: data }),
   login: (data) => apiFetch("/api/auth/login", { method: "POST", body: data }),
-  logout: (refreshToken) => apiFetch("/api/auth/logout", { method: "POST", body: { refreshToken } }),
-  refresh: (refreshToken) => apiFetch("/api/auth/refresh", { method: "POST", body: { refreshToken } }),
+  logout: (refreshToken) =>
+    apiFetch("/api/auth/logout", { method: "POST", body: { refreshToken } }),
+  refresh: (refreshToken) =>
+    apiFetch("/api/auth/refresh", { method: "POST", body: { refreshToken } }),
 };
 
-// ─── User API ────────────────────────────────────────────────────────
+// ─── User API ───────────────────────────────────────────────────────
 export const userApi = {
   getMe: () => apiFetch("/api/users/me"),
   getTransactions: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
     return apiFetch(`/api/users/transactions${qs ? `?${qs}` : ""}`);
   },
-  withdraw: (data) => apiFetch("/api/users/withdraw", { method: "POST", body: data }),
-  updateProfile: (data) => apiFetch("/api/users/profile", { method: "PUT", body: data }),
+  withdraw: (data) =>
+    apiFetch("/api/users/withdraw", { method: "POST", body: data }),
+  updateProfile: (data) =>
+    apiFetch("/api/users/profile", { method: "PUT", body: data }),
 };
 
 // ─── Admin API ───────────────────────────────────────────────────────
@@ -150,10 +200,27 @@ export const adminApi = {
     return apiFetch(`/api/admin/users${qs ? `?${qs}` : ""}`);
   },
   getUser: (id) => apiFetch(`/api/admin/users/${id}`),
-  updatePortfolio: (id, data) => apiFetch(`/api/admin/users/${id}/portfolio`, { method: "PUT", body: data }),
-  deposit: (id, data) => apiFetch(`/api/admin/users/${id}/deposit`, { method: "POST", body: data }),
-  creditProfit: (id, data) => apiFetch(`/api/admin/users/${id}/credit-profit`, { method: "POST", body: data }),
-  notify: (data) => apiFetch("/api/admin/notify", { method: "POST", body: data }),
+  updatePortfolio: (id, data) =>
+    apiFetch(`/api/admin/users/${id}/portfolio`, {
+      method: "PUT",
+      body: data,
+    }),
+  deposit: (id, data) =>
+    apiFetch(`/api/admin/users/${id}/deposit`, {
+      method: "POST",
+      body: data,
+    }),
+  creditProfit: (id, data) =>
+    apiFetch(`/api/admin/users/${id}/credit-profit`, {
+      method: "POST",
+      body: data,
+    }),
+  notify: (data) =>
+    apiFetch("/api/admin/notify", { method: "POST", body: data }),
   getNotifications: () => apiFetch("/api/admin/notifications"),
-  setUserStatus: (id, isActive) => apiFetch(`/api/admin/users/${id}/status`, { method: "PUT", body: { isActive } }),
+  setUserStatus: (id, isActive) =>
+    apiFetch(`/api/admin/users/${id}/status`, {
+      method: "PUT",
+      body: { isActive },
+    }),
 };

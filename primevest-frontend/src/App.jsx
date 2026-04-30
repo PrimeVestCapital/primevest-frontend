@@ -104,8 +104,25 @@ async function apiFetch(endpoint, options = {}, retry = true) {
 }
 
 // ─── Utility ─────────────────────────────────────────────
-const fmt = (n) => Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const fmtDate = (ts) => new Date(ts).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+const fmt = (n) =>
+  Number(n || 0).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
+const fmtDate = (ts) => {
+  if (!ts) return "—";
+
+  const d = new Date(ts);
+
+  if (isNaN(d.getTime())) return "—";
+
+  return d.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+};
 
 // ─── Toast Component ──────────────────────────────────────
 function EmailToast({ toasts, onClose }) {
