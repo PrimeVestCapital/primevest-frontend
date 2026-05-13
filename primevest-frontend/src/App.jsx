@@ -268,7 +268,7 @@ function AuthPage({ onLogin, toast }) {
     if (form.password !== form.confirm) { setErr("Passwords do not match."); return; }
     setLoading(true);
     try {
-      const res = await apiFetch("/auth/register", { method: "POST", body: { name: form.name, email: form.email, password: form.password, pin: form.pin } });
+      const res = await apiFetch("/api/auth/register", { method: "POST", body: { name: form.name, email: form.email, password: form.password, pin: form.pin } });
       tokenStore.set(res.data.accessToken, res.data.refreshToken);
       toast("✅ Welcome!", `Account created for ${res.data.user.email}`, "success");
       onLogin(res.data.user);
