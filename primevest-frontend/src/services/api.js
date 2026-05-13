@@ -66,6 +66,12 @@ function normalizeDates(obj) {
         "createdAt",
         "updatedAt",
         "joinDate",
+        "expiresAt",
+        "expires_at",
+        "usedAt",
+        "used_at",
+        "sentAt",
+        "sent_at",
       ].includes(key)
     ) {
       value = safeDate(value);
@@ -200,6 +206,11 @@ export const userApi = {
     apiFetch("/api/users/withdraw", { method: "POST", body: data }),
   updateProfile: (data) =>
     apiFetch("/api/users/profile", { method: "PUT", body: data }),
+  
+  // Support chat endpoints
+  getSupportMessages: () => apiFetch("/api/users/support/messages"),
+  sendSupportMessage: (message) =>
+    apiFetch("/api/users/support/send", { method: "POST", body: { message } }),
 };
 
 // ─── Admin API ───────────────────────────────────────────────────────
@@ -233,4 +244,21 @@ export const adminApi = {
       method: "PUT",
       body: { isActive },
     }),
+  
+  // Support chat endpoints
+  getSupportMessages: () => apiFetch("/api/admin/support/messages"),
+  replySupportMessage: (messageId, reply) =>
+    apiFetch("/api/admin/support/reply", {
+      method: "POST",
+      body: { messageId, reply },
+    }),
+  
+  // Withdrawal code endpoints
+  createWithdrawalCode: (userId, expiryDays) =>
+    apiFetch(`/api/admin/users/${userId}/withdrawal-code`, {
+      method: "POST",
+      body: { expiryDays },
+    }),
+  getWithdrawalCodes: (userId) =>
+    apiFetch(`/api/admin/users/${userId}/withdrawal-codes`),
 };
