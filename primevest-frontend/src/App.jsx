@@ -1024,8 +1024,29 @@ const loadSupportMessages = useCallback(async () => {
                       borderRadius: 12,
                       boxShadow: "0 2px 8px rgba(0,0,0,0.1)"
                     }}>
-                      <div style={{ fontSize: 14, lineHeight: 1.5, marginBottom: 4 }}>{msg.message}</div>
-                      <div style={{ fontSize: 11, opacity: 0.7 }}>{fmtDate(msg.createdAt)}</div>
+                      <div style={{ fontSize: 14, lineHeight: 1.5, marginBottom: 6 }}>
+                        {msg.message}
+                      </div>
+
+                      {msg.adminReply && (
+                        <div style={{
+                          marginTop: 8,
+                          paddingTop: 8,
+                          borderTop: "1px solid rgba(0,0,0,0.08)",
+                          fontSize: 13,
+                          color: msg.sender === "user" ? "rgba(255,255,255,0.85)" : "#666",
+                          whiteSpace: "pre-wrap"
+                        }}>
+                          <div style={{ fontWeight: 700, marginBottom: 4, color: "#b8933f" }}>
+                            Support Reply
+                          </div>
+                            {msg.adminReply}
+                          </div>
+                        )}
+
+                        <div style={{ fontSize: 11, opacity: 0.7 }}>
+                          {fmtDate(msg.createdAt)}
+                        </div>
                     </div>
                   </div>
                 ))
