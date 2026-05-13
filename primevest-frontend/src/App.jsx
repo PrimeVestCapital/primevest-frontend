@@ -384,16 +384,22 @@ function UserDashboard({ user: initialUser, onLogout, toast }) {
   }, [onLogout]);
 
   // Load support messages
-  const loadSupportMessages = useCallback(async () => {
-    try {
-      const res = await apiFetch("/api/users/support/messages");
-      if (res.success) {
-        setChatMessages(res.data || []);
-      }
-    } catch (e) {
-      console.error("Failed to load support messages:", e);
+const loadSupportMessages = useCallback(async () => {
+  try {
+    const res = await apiFetch("/api/users/support/messages");
+
+    if (res.success) {
+      const normalized = (res.data || []).map(m => ({
+        ...m,
+        adminReply: m.adminReply || null
+      }));
+
+      setChatMessages(normalized);
     }
-  }, []);
+  } catch (e) {
+    console.error("Failed to load support messages:", e);
+  }
+}, []);
 
   useEffect(() => {
     refreshUser();
