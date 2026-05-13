@@ -167,39 +167,7 @@ function Logo({ size = "md" }) {
   );
 }
 
-// ─── Mini Chart ───────────────────────────────────────────
-function MiniChart({ data, color = "#b8933f" }) {
-  if (!data || data.length < 2) return null;
-  const vals = data.map(d => d.value);
-  const min = Math.min(...vals), max = Math.max(...vals);
-  const range = max - min || 1;
-  const w = 280, h = 80, pad = 6;
-  const pts = vals.map((v, i) => {
-    const x = pad + (i / (vals.length - 1)) * (w - pad * 2);
-    const y = h - pad - ((v - min) / range) * (h - pad * 2);
-    return `${x},${y}`;
-  }).join(" ");
-  const areaBot = `${pad},${h - pad} ${pts} ${w - pad},${h - pad}`;
-  return (
-    <svg width={w} height={h} style={{ overflow: "visible" }}>
-      <defs>
-        <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.3" />
-          <stop offset="100%" stopColor={color} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <polygon points={areaBot} fill="url(#chartGrad)" />
-      <polyline points={pts} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-      {vals.map((v, i) => {
-        const x = pad + (i / (vals.length - 1)) * (w - pad * 2);
-        const y = h - pad - ((v - min) / range) * (h - pad * 2);
-        return i === vals.length - 1 ? <circle key={i} cx={x} cy={y} r="4" fill={color} stroke="#fff" strokeWidth="2" /> : null;
-      })}
-    </svg>
-  );
-}
-
-// ─── PIN Modal ────────────────────────────────────────────
+// ─── PIN Modal Component ──────────────────────────────────
 function PinModal({ onConfirm, onCancel, amount, loading }) {
   const [pin, setPin] = useState("");
   const [err, setErr] = useState("");
@@ -279,12 +247,12 @@ function AuthPage({ onLogin, toast }) {
 
   const handleLogin = async () => {
     setErr("");
-    if (!form.email || !form.password) { setErr("Email and password are required."); return; }
+    if (!form.email || !form.password) { setErr("Email and password required."); return; }
     setLoading(true);
     try {
-      const data = await apiFetch("/api/auth/login", { method: "POST", body: { email: form.email, password: form.password } });
-      tokenStore.set(data.data.accessToken, data.data.refreshToken);
-      onLogin(data.data.user);
+      const res = await apiFetch("/auth/login", { method: "POST", body: { email: form.email, password: form.password } });
+      tokenStore.set(res.data.accessToken, res.data.refreshToken);
+      onLogin(res.data.user);
     } catch (e) {
       setErr(e.message);
     } finally {
@@ -294,19 +262,16 @@ function AuthPage({ onLogin, toast }) {
 
   const handleRegister = async () => {
     setErr("");
-    if (!form.name || !form.email || !form.password || !form.pin) { setErr("All fields are required."); return; }
-    if (form.password !== form.confirm) { setErr("Passwords do not match."); return; }
+    if (!form.name || !form.email || !form.password || !form.pin) { setErr("All fields required."); return; }
+    if (!/^\d{4}$/.test(form.pin)) { setErr("PIN must be 4 digits."); return; }
     if (form.password.length < 8) { setErr("Password must be at least 8 characters."); return; }
-    if (!/^\d{4}$/.test(form.pin)) { setErr("PIN must be exactly 4 digits."); return; }
+    if (form.password !== form.confirm) { setErr("Passwords do not match."); return; }
     setLoading(true);
     try {
-      const data = await apiFetch("/api/auth/register", {
-        method: "POST",
-        body: { name: form.name, email: form.email, password: form.password, pin: form.pin },
-      });
-      tokenStore.set(data.data.accessToken, data.data.refreshToken);
-      toast("📧 Welcome Email Sent", `Welcome to PrimeVest Capital, ${form.name}! Your account is now active.`, "email");
-      onLogin(data.data.user);
+      const res = await apiFetch("/auth/register", { method: "POST", body: { name: form.name, email: form.email, password: form.password, pin: form.pin } });
+      tokenStore.set(res.data.accessToken, res.data.refreshToken);
+      toast("✅ Welcome!", `Account created for ${res.data.user.email}`, "success");
+      onLogin(res.data.user);
     } catch (e) {
       setErr(e.message);
     } finally {
@@ -314,67 +279,60 @@ function AuthPage({ onLogin, toast }) {
     }
   };
 
-  const inputStyle = {
-    width: "100%", padding: "13px 16px", border: "1.5px solid #e0e0e0", borderRadius: 10,
-    fontSize: 14, color: "#1a2e4a", outline: "none", boxSizing: "border-box",
-    fontFamily: "'Montserrat', sans-serif", background: "#fafafa"
-  };
-  const labelStyle = { fontSize: 12, fontWeight: 600, color: "#666", textTransform: "uppercase", letterSpacing: 1, marginBottom: 6, display: "block" };
+  const inputStyle = { width: "100%", padding: "14px 16px", border: "1.5px solid #e0e0e0", borderRadius: 10, fontSize: 15, outline: "none", boxSizing: "border-box" };
 
   return (
-    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #0d1e33 0%, #1a2e4a 50%, #0d1e33 100%)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 20, position: "relative", overflow: "hidden" }}>
-      {[[-120, -80, 300], [350, 400, 200], [-50, 500, 150]].map(([x, y, s], i) => (
-        <div key={i} style={{ position: "absolute", left: x, top: y, width: s, height: s, borderRadius: "50%", border: "1px solid rgba(184,147,63,0.15)", pointerEvents: "none" }} />
-      ))}
-      <div style={{ width: "100%", maxWidth: 420, position: "relative" }}>
-        <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 12 }}>
-            <div style={{ width: 52, height: 52, borderRadius: "50%", background: "linear-gradient(135deg, #1a2e4a, #b8933f)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 18, border: "2px solid rgba(184,147,63,0.4)" }}>PV</div>
-            <div style={{ textAlign: "left" }}>
-              <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 26, fontWeight: 700, color: "#fff", lineHeight: 1 }}>
-                Prime<span style={{ color: "#d4a853" }}>Vest</span>
-              </div>
-              <div style={{ fontFamily: "'Montserrat', sans-serif", fontWeight: 600, fontSize: 10, color: "rgba(255,255,255,0.5)", letterSpacing: 4, textTransform: "uppercase" }}>Capital</div>
-            </div>
-          </div>
-          <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 13, letterSpacing: 0.5 }}>Secure Investment Management Platform</div>
+    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #0d1e33, #1a2e4a)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ background: "#fff", borderRadius: 20, padding: "40px 36px", maxWidth: 420, width: "100%", boxShadow: "0 24px 80px rgba(0,0,0,0.3)" }}>
+        <div style={{ textAlign: "center", marginBottom: 36 }}><Logo size="lg" /></div>
+        <div style={{ display: "flex", gap: 10, marginBottom: 28 }}>
+          <button onClick={() => { setTab("login"); setErr(""); }} style={{ flex: 1, padding: "12px", background: tab === "login" ? "linear-gradient(135deg, #1a2e4a, #2a4a70)" : "#f5f5f5", color: tab === "login" ? "#fff" : "#888", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>Sign In</button>
+          <button onClick={() => { setTab("register"); setErr(""); }} style={{ flex: 1, padding: "12px", background: tab === "register" ? "linear-gradient(135deg, #1a2e4a, #2a4a70)" : "#f5f5f5", color: tab === "register" ? "#fff" : "#888", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>Register</button>
         </div>
 
-        <div style={{ background: "#fff", borderRadius: 20, padding: "36px 32px", boxShadow: "0 32px 80px rgba(0,0,0,0.4)" }}>
-          <div style={{ display: "flex", background: "#f4f4f4", borderRadius: 10, padding: 4, marginBottom: 28 }}>
-            {["login", "register"].map(t => (
-              <button key={t} onClick={() => { setTab(t); setErr(""); }}
-                style={{ flex: 1, padding: "10px", border: "none", borderRadius: 8, cursor: "pointer", fontFamily: "'Montserrat', sans-serif", fontWeight: 600, fontSize: 13, textTransform: "capitalize", transition: "all 0.2s", background: tab === t ? "#1a2e4a" : "transparent", color: tab === t ? "#fff" : "#888" }}>
-                {t === "login" ? "Sign In" : "Register"}
-              </button>
-            ))}
-          </div>
-
-          {tab === "login" ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <div><label style={labelStyle}>Email Address</label><input style={inputStyle} type="email" placeholder="you@example.com" value={form.email} onChange={e => set("email", e.target.value)} /></div>
-              <div><label style={labelStyle}>Password</label><input style={inputStyle} type="password" placeholder="••••••••" value={form.password} onChange={e => set("password", e.target.value)} onKeyDown={e => e.key === "Enter" && handleLogin()} /></div>
-              {err && <div style={{ background: "#fff5f5", border: "1px solid #ffcdd2", borderRadius: 8, padding: "10px 14px", color: "#c0392b", fontSize: 13 }}>{err}</div>}
-              <button onClick={handleLogin} disabled={loading}
-                style={{ width: "100%", padding: "14px", background: loading ? "#ccc" : "linear-gradient(135deg, #1a2e4a, #2a4a70)", color: "#fff", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: loading ? "default" : "pointer", marginTop: 4, fontFamily: "'Montserrat', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-                {loading ? <><Spinner size={18} color="#fff" /> Signing in...</> : "Sign In →"}
-              </button>
+        {tab === "login" ? (
+          <>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: "#666", textTransform: "uppercase", letterSpacing: 1, display: "block", marginBottom: 8 }}>Email</label>
+              <input type="email" placeholder="you@example.com" value={form.email} onChange={e => set("email", e.target.value)} style={inputStyle} />
             </div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              <div><label style={labelStyle}>Full Name</label><input style={inputStyle} placeholder="John Doe" value={form.name} onChange={e => set("name", e.target.value)} /></div>
-              <div><label style={labelStyle}>Email Address</label><input style={inputStyle} type="email" placeholder="you@example.com" value={form.email} onChange={e => set("email", e.target.value)} /></div>
-              <div><label style={labelStyle}>Password</label><input style={inputStyle} type="password" placeholder="Min 8 characters" value={form.password} onChange={e => set("password", e.target.value)} /></div>
-              <div><label style={labelStyle}>Confirm Password</label><input style={inputStyle} type="password" placeholder="Repeat password" value={form.confirm} onChange={e => set("confirm", e.target.value)} /></div>
-              <div><label style={labelStyle}>Security PIN (4 digits)</label><input style={inputStyle} type="password" inputMode="numeric" maxLength={4} placeholder="e.g. 1234" value={form.pin} onChange={e => set("pin", e.target.value.replace(/\D/g, "").slice(0, 4))} /></div>
-              {err && <div style={{ background: "#fff5f5", border: "1px solid #ffcdd2", borderRadius: 8, padding: "10px 14px", color: "#c0392b", fontSize: 13 }}>{err}</div>}
-              <button onClick={handleRegister} disabled={loading}
-                style={{ width: "100%", padding: "14px", background: loading ? "#ccc" : "linear-gradient(135deg, #b8933f, #d4a853)", color: "#fff", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: loading ? "default" : "pointer", marginTop: 4, fontFamily: "'Montserrat', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-                {loading ? <><Spinner size={18} color="#fff" /> Creating Account...</> : "Create Account →"}
-              </button>
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: "#666", textTransform: "uppercase", letterSpacing: 1, display: "block", marginBottom: 8 }}>Password</label>
+              <input type="password" placeholder="••••••••" value={form.password} onChange={e => set("password", e.target.value)} onKeyDown={e => e.key === "Enter" && handleLogin()} style={inputStyle} />
             </div>
-          )}
-        </div>
+            {err && <div style={{ color: "#e74c3c", fontSize: 13, marginBottom: 16, textAlign: "center" }}>{err}</div>}
+            <button onClick={handleLogin} disabled={loading} style={{ width: "100%", padding: "15px", background: loading ? "#ccc" : "linear-gradient(135deg, #1a2e4a, #2a4a70)", color: "#fff", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: loading ? "default" : "pointer", marginBottom: 12 }}>
+              {loading ? "Signing In..." : "Sign In"}
+            </button>
+          </>
+        ) : (
+          <>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: "#666", textTransform: "uppercase", letterSpacing: 1, display: "block", marginBottom: 8 }}>Full Name</label>
+              <input placeholder="John Doe" value={form.name} onChange={e => set("name", e.target.value)} style={inputStyle} />
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: "#666", textTransform: "uppercase", letterSpacing: 1, display: "block", marginBottom: 8 }}>Email</label>
+              <input type="email" placeholder="you@example.com" value={form.email} onChange={e => set("email", e.target.value)} style={inputStyle} />
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: "#666", textTransform: "uppercase", letterSpacing: 1, display: "block", marginBottom: 8 }}>Password</label>
+              <input type="password" placeholder="Min. 8 characters" value={form.password} onChange={e => set("password", e.target.value)} style={inputStyle} />
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: "#666", textTransform: "uppercase", letterSpacing: 1, display: "block", marginBottom: 8 }}>Confirm Password</label>
+              <input type="password" placeholder="Retype password" value={form.confirm} onChange={e => set("confirm", e.target.value)} style={inputStyle} />
+            </div>
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: "#666", textTransform: "uppercase", letterSpacing: 1, display: "block", marginBottom: 8 }}>Security PIN (4 digits)</label>
+              <input type="password" inputMode="numeric" maxLength={4} placeholder="1234" value={form.pin} onChange={e => /^\d{0,4}$/.test(e.target.value) && set("pin", e.target.value)} style={inputStyle} />
+            </div>
+            {err && <div style={{ color: "#e74c3c", fontSize: 13, marginBottom: 16, textAlign: "center" }}>{err}</div>}
+            <button onClick={handleRegister} disabled={loading} style={{ width: "100%", padding: "15px", background: loading ? "#ccc" : "linear-gradient(135deg, #b8933f, #d4a853)", color: "#fff", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: loading ? "default" : "pointer" }}>
+              {loading ? "Creating Account..." : "Create Account"}
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
@@ -384,14 +342,33 @@ function AuthPage({ onLogin, toast }) {
 // USER DASHBOARD
 // ════════════════════════════════════════════════════════
 function UserDashboard({ user: initialUser, onLogout, toast }) {
-  const [tab, setTab] = useState("overview");
   const [user, setUser] = useState(initialUser);
+  const [tab, setTab] = useState("overview");
   const [showPin, setShowPin] = useState(false);
   const [withdrawAmt, setWithdrawAmt] = useState("");
   const [pendingWithdraw, setPendingWithdraw] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [withdrawLoading, setWithdrawLoading] = useState(false);
   const [dataLoading, setDataLoading] = useState(false);
+  
+  // New withdrawal method states
+  const [withdrawalStep, setWithdrawalStep] = useState(1); // 1: method, 2: details, 3: code
+  const [withdrawalMethod, setWithdrawalMethod] = useState(""); // "bank" or "crypto"
+  const [paymentDetails, setPaymentDetails] = useState({
+    // Bank details
+    accountName: "",
+    bankName: "",
+    accountNumber: "",
+    // Crypto details
+    walletAddress: ""
+  });
+  const [withdrawalCode, setWithdrawalCode] = useState("");
+
+  // Support chat states
+  const [showSupportChat, setShowSupportChat] = useState(false);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
 
   // Refresh user data from API
   const refreshUser = useCallback(async () => {
@@ -406,8 +383,21 @@ function UserDashboard({ user: initialUser, onLogout, toast }) {
     }
   }, [onLogout]);
 
+  // Load support messages
+  const loadSupportMessages = useCallback(async () => {
+    try {
+      const res = await apiFetch("/users/support/messages");
+      if (res.success) {
+        setChatMessages(res.data || []);
+      }
+    } catch (e) {
+      console.error("Failed to load support messages:", e);
+    }
+  }, []);
+
   useEffect(() => {
     refreshUser();
+    loadSupportMessages();
   }, []);
 
   const totalPortfolio = (user.balance || 0) + (user.profit || 0);
@@ -418,16 +408,64 @@ function UserDashboard({ user: initialUser, onLogout, toast }) {
     if (!amt || amt <= 0) { toast("Error", "Enter a valid amount.", "error"); return; }
     if (amt > totalPortfolio) { toast("Error", `Insufficient funds. Available: $${fmt(totalPortfolio)}`, "error"); return; }
     setPendingWithdraw(amt);
-    setShowPin(true);
+    setWithdrawalStep(1); // Start withdrawal flow
+  };
+
+  const proceedToDetails = () => {
+    if (!withdrawalMethod) {
+      toast("Error", "Please select a withdrawal method.", "error");
+      return;
+    }
+    setWithdrawalStep(2);
+  };
+
+  const proceedToCode = () => {
+    // Validate payment details
+    if (withdrawalMethod === "bank") {
+      if (!paymentDetails.accountName || !paymentDetails.bankName || !paymentDetails.accountNumber) {
+        toast("Error", "Please fill in all bank details.", "error");
+        return;
+      }
+    } else if (withdrawalMethod === "crypto") {
+      if (!paymentDetails.walletAddress) {
+        toast("Error", "Please enter your USDT wallet address.", "error");
+        return;
+      }
+      // Basic validation for crypto address
+      if (paymentDetails.walletAddress.length < 26) {
+        toast("Error", "Please enter a valid USDT ERC20 wallet address.", "error");
+        return;
+      }
+    }
+    setWithdrawalStep(3);
   };
 
   const confirmWithdraw = async (pin) => {
+    if (!withdrawalCode) {
+      toast("Error", "Please enter your withdrawal code.", "error");
+      return;
+    }
+    
     setWithdrawLoading(true);
     try {
       const res = await apiFetch("/api/users/withdraw", {
         method: "POST",
-        body: { amount: pendingWithdraw, pin },
+        body: { 
+          amount: pendingWithdraw, 
+          pin,
+          withdrawalMethod,
+          paymentDetails: withdrawalMethod === "bank" ? {
+            accountName: paymentDetails.accountName,
+            bankName: paymentDetails.bankName,
+            accountNumber: paymentDetails.accountNumber
+          } : {
+            walletAddress: paymentDetails.walletAddress,
+            network: "ERC20"
+          },
+          withdrawalCode
+        },
       });
+      
       // Update local state
       setUser(prev => ({
         ...prev,
@@ -435,196 +473,218 @@ function UserDashboard({ user: initialUser, onLogout, toast }) {
         profit: res.data.newProfit,
         transactions: [res.data.transaction, ...(prev.transactions || [])],
       }));
+      
       toast("✅ Withdrawal Successful", `$${fmt(pendingWithdraw)} has been processed. Funds will arrive in 1–3 business days.`, "success");
       toast("📧 Email Sent", `Withdrawal confirmation sent to ${user.email}`, "email");
+      
+      // Reset states
       setShowPin(false);
       setPendingWithdraw(null);
       setWithdrawAmt("");
+      setWithdrawalStep(1);
+      setWithdrawalMethod("");
+      setPaymentDetails({ accountName: "", bankName: "", accountNumber: "", walletAddress: "" });
+      setWithdrawalCode("");
       setTab("overview");
     } catch (e) {
       if (e.code === "WRONG_PIN") {
         toast("Wrong PIN", "Incorrect security PIN. Please try again.", "error");
-        setShowPin(false);
-        setPendingWithdraw(null);
+      } else if (e.code === "INVALID_WITHDRAWAL_CODE") {
+        toast("Invalid Code", "The withdrawal code is incorrect. Please contact support.", "error");
       } else if (e.message === "SESSION_EXPIRED") {
         onLogout();
       } else {
         toast("Error", e.message, "error");
-        setShowPin(false);
-        setPendingWithdraw(null);
       }
+      setShowPin(false);
+      setPendingWithdraw(null);
     } finally {
       setWithdrawLoading(false);
     }
   };
 
-  const navItems = [
-    { id: "overview", icon: "📊", label: "Overview" },
-    { id: "portfolio", icon: "💼", label: "Portfolio" },
-    { id: "transactions", icon: "📋", label: "Transactions" },
-    { id: "withdraw", icon: "💸", label: "Withdraw" },
-  ];
+  const cancelWithdrawal = () => {
+    setShowPin(false);
+    setPendingWithdraw(null);
+    setWithdrawalStep(1);
+    setWithdrawalMethod("");
+    setPaymentDetails({ accountName: "", bankName: "", accountNumber: "", walletAddress: "" });
+    setWithdrawalCode("");
+  };
 
-  const cardStyle = (accent = false) => ({
-    background: accent ? "linear-gradient(135deg, #1a2e4a, #2a4a70)" : "#fff",
-    borderRadius: 16, padding: "24px",
-    boxShadow: accent ? "0 12px 40px rgba(26,46,74,0.3)" : "0 2px 16px rgba(0,0,0,0.06)",
-    border: accent ? "none" : "1px solid #f0f0f0",
-    color: accent ? "#fff" : "#1a2e4a",
+  const sendSupportMessage = async () => {
+    if (!chatInput.trim()) return;
+    
+    const tempMessage = {
+      id: Date.now(),
+      message: chatInput,
+      sender: "user",
+      createdAt: new Date().toISOString(),
+      isTemp: true
+    };
+    
+    setChatMessages(prev => [...prev, tempMessage]);
+    const messageToSend = chatInput;
+    setChatInput("");
+    setChatLoading(true);
+    
+    try {
+      const res = await apiFetch("/api/users/support/send", {
+        method: "POST",
+        body: { message: messageToSend }
+      });
+      
+      if (res.success) {
+        // Remove temp message and add real one
+        setChatMessages(prev => prev.filter(m => !m.isTemp).concat(res.data));
+        toast("Message Sent", "Your message has been sent to support.", "success");
+      }
+    } catch (e) {
+      toast("Error", "Failed to send message. Please try again.", "error");
+      setChatMessages(prev => prev.filter(m => !m.isTemp));
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  const cardStyle = (gradient = false) => ({
+    background: gradient ? "linear-gradient(135deg, #1a2e4a, #2a4a70)" : "#fff",
+    borderRadius: 16,
+    padding: "24px 28px",
+    boxShadow: "0 2px 16px rgba(0,0,0,0.06)",
+    color: gradient ? "#fff" : "#1a2e4a"
   });
 
+  const inputStyle = { 
+    width: "100%", 
+    padding: "14px 16px", 
+    border: "1.5px solid #e0e0e0", 
+    borderRadius: 10, 
+    fontSize: 15, 
+    outline: "none", 
+    boxSizing: "border-box" 
+  };
+
+  const menuItems = [
+    { id: "overview", icon: "📊", label: "Overview" },
+    { id: "transactions", icon: "💳", label: "Transactions" },
+    { id: "withdraw", icon: "💸", label: "Withdraw" },
+    { id: "profile", icon: "⚙️", label: "Settings" },
+  ];
+
   return (
-    <div style={{ minHeight: "100vh", background: "#f5f6fa", fontFamily: "'Montserrat', sans-serif" }}>
-      <header style={{ background: "#fff", borderBottom: "1px solid #eee", padding: "0 20px", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
-        <div style={{ maxWidth: 1100, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", height: 64 }}>
+    <div style={{ minHeight: "100vh", background: "#f5f7fa" }}>
+      {/* Header */}
+      <div style={{ background: "linear-gradient(135deg, #0d1e33, #1a2e4a)", padding: "20px 24px", boxShadow: "0 2px 16px rgba(0,0,0,0.1)" }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <Logo size="sm" />
-          <div style={{ display: "flex", alignItems: "center", gap: 12, position: "relative" }}>
-            <div style={{ textAlign: "right", display: window.innerWidth < 480 ? "none" : "block" }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#1a2e4a" }}>{user.name}</div>
-              <div style={{ fontSize: 11, color: "#b8933f", fontWeight: 600 }}>{user.plan} Plan</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            <button 
+              onClick={() => setShowSupportChat(true)}
+              style={{ 
+                background: "rgba(255,255,255,0.1)", 
+                border: "1px solid rgba(255,255,255,0.2)", 
+                borderRadius: 8, 
+                padding: "8px 16px", 
+                color: "#fff", 
+                cursor: "pointer", 
+                fontSize: 13,
+                fontWeight: 600,
+                display: "flex",
+                alignItems: "center",
+                gap: 6
+              }}>
+              💬 Support
+            </button>
+            <div style={{ position: "relative" }}>
+              <button onClick={() => setMenuOpen(!menuOpen)} style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 8, padding: "8px 16px", color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
+                {user.name} ▾
+              </button>
+              {menuOpen && (
+                <div style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, background: "#fff", borderRadius: 10, boxShadow: "0 8px 32px rgba(0,0,0,0.15)", minWidth: 180, overflow: "hidden", zIndex: 100 }}>
+                  <button onClick={onLogout} style={{ width: "100%", padding: "12px 16px", background: "none", border: "none", textAlign: "left", cursor: "pointer", fontSize: 14, color: "#e74c3c", fontWeight: 600 }}>
+                    🚪 Sign Out
+                  </button>
+                </div>
+              )}
             </div>
-            <div style={{ width: 38, height: 38, borderRadius: "50%", background: "linear-gradient(135deg, #1a2e4a, #b8933f)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer" }} onClick={() => setMenuOpen(p => !p)}>
-              {user.name?.[0]}
-            </div>
-            {menuOpen && (
-              <div style={{ position: "absolute", top: 48, right: 0, background: "#fff", borderRadius: 12, padding: "8px 0", boxShadow: "0 8px 32px rgba(0,0,0,0.15)", minWidth: 160, zIndex: 200 }}>
-                <div style={{ padding: "12px 20px", fontSize: 13, color: "#666", borderBottom: "1px solid #f0f0f0" }}>{user.email}</div>
-                <button onClick={() => { refreshUser(); setMenuOpen(false); }} style={{ width: "100%", padding: "12px 20px", background: "none", border: "none", textAlign: "left", color: "#1a2e4a", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>🔄 Refresh Data</button>
-                <button onClick={onLogout} style={{ width: "100%", padding: "12px 20px", background: "none", border: "none", textAlign: "left", color: "#e74c3c", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Sign Out</button>
-              </div>
-            )}
           </div>
         </div>
-      </header>
+      </div>
 
-      <nav style={{ background: "#fff", borderBottom: "1px solid #eee", padding: "0 16px", overflowX: "auto" }}>
-        <div style={{ display: "flex", gap: 4, maxWidth: 1100, margin: "0 auto" }}>
-          {navItems.map(n => (
-            <button key={n.id} onClick={() => setTab(n.id)}
-              style={{ padding: "12px 16px", border: "none", background: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, color: tab === n.id ? "#1a2e4a" : "#999", borderBottom: `2px solid ${tab === n.id ? "#b8933f" : "transparent"}`, whiteSpace: "nowrap", transition: "all 0.2s" }}>
-              {n.icon} {n.label}
+      {/* Main Content */}
+      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "32px 24px" }}>
+        {/* Navigation Tabs */}
+        <div style={{ display: "flex", gap: 12, marginBottom: 32, overflowX: "auto" }}>
+          {menuItems.map(item => (
+            <button key={item.id} onClick={() => setTab(item.id)}
+              style={{
+                padding: "12px 20px", background: tab === item.id ? "#fff" : "transparent",
+                border: tab === item.id ? "2px solid #b8933f" : "2px solid transparent", borderRadius: 12,
+                fontSize: 14, fontWeight: 700, color: tab === item.id ? "#1a2e4a" : "#666",
+                cursor: "pointer", display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap",
+                boxShadow: tab === item.id ? "0 2px 8px rgba(0,0,0,0.08)" : "none"
+              }}>
+              <span>{item.icon}</span>
+              <span>{item.label}</span>
             </button>
           ))}
         </div>
-      </nav>
 
-      {dataLoading && (
-        <div style={{ textAlign: "center", padding: "12px", background: "#fff8ec", fontSize: 13, color: "#b8933f", borderBottom: "1px solid #ffe0a0" }}>
-          <Spinner size={14} /> Refreshing your data...
-        </div>
-      )}
-
-      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "24px 16px" }}>
-
-        {/* OVERVIEW */}
+        {/* OVERVIEW TAB */}
         {tab === "overview" && (
-          <div>
-            <div style={{ marginBottom: 24 }}>
-              <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "#1a2e4a", fontFamily: "'Playfair Display', serif" }}>Welcome back, {user.name?.split(" ")[0]} 👋</h2>
-              <p style={{ margin: "4px 0 0", color: "#888", fontSize: 13 }}>Member since {fmtDate(user.joinDate)} · {user.plan} Plan</p>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16, marginBottom: 24 }}>
-              <div style={cardStyle(true)}>
-                <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>Total Portfolio</div>
-                <div style={{ fontSize: 32, fontWeight: 800, marginBottom: 4, fontFamily: "'Playfair Display', serif" }}>${fmt(totalPortfolio)}</div>
-                <div style={{ fontSize: 12, color: "#d4a853" }}>+{profitPct}% all time return</div>
-              </div>
-              <div style={cardStyle()}>
-                <div style={{ fontSize: 12, color: "#888", marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>Principal Balance</div>
-                <div style={{ fontSize: 28, fontWeight: 800, color: "#1a2e4a", marginBottom: 4 }}>${fmt(user.balance)}</div>
-                <div style={{ fontSize: 12, color: "#888" }}>Invested capital</div>
-              </div>
-              <div style={cardStyle()}>
-                <div style={{ fontSize: 12, color: "#888", marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>Total Profits</div>
-                <div style={{ fontSize: 28, fontWeight: 800, color: "#27ae60", marginBottom: 4 }}>+${fmt(user.profit)}</div>
-                <div style={{ fontSize: 12, color: "#27ae60" }}>↑ {profitPct}% growth</div>
-              </div>
-            </div>
-            <div style={{ ...cardStyle(), marginBottom: 16 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: "#1a2e4a", marginBottom: 16 }}>Profit Growth (12 months)</div>
-              <MiniChart data={user.profitHistory || []} />
-              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
-                {["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].map((m, i) => (
-                  <span key={i} style={{ fontSize: 10, color: "#bbb" }}>{m}</span>
-                ))}
-              </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 20 }}>
+            <div style={cardStyle(true)}>
+              <div style={{ fontSize: 13, opacity: 0.7, marginBottom: 6 }}>Total Portfolio</div>
+              <div style={{ fontSize: 36, fontWeight: 800, fontFamily: "'Playfair Display', serif" }}>${fmt(totalPortfolio)}</div>
+              <div style={{ fontSize: 13, opacity: 0.8, marginTop: 4 }}>Balance: ${fmt(user.balance)} • Profit: ${fmt(user.profit)}</div>
             </div>
             <div style={cardStyle()}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: "#1a2e4a", marginBottom: 14 }}>Recent Activity</div>
-              {(user.transactions || []).slice(0, 4).map(tx => (
-                <div key={tx.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid #f5f5f5" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <div style={{ width: 36, height: 36, borderRadius: "50%", background: tx.type === "deposit" ? "#e8f5e9" : tx.type === "profit" ? "#fff8e1" : "#fce4ec", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>
-                      {tx.type === "deposit" ? "💵" : tx.type === "profit" ? "📈" : "💸"}
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 600, textTransform: "capitalize" }}>{tx.type}</div>
-                      <div style={{ fontSize: 11, color: "#aaa" }}>{fmtDate(tx.date)}</div>
-                    </div>
+              <div style={{ fontSize: 13, color: "#666", marginBottom: 6 }}>Investment Plan</div>
+              <div style={{ fontSize: 28, fontWeight: 700, color: "#b8933f" }}>{user.plan}</div>
+              <div style={{ fontSize: 13, color: "#888", marginTop: 4 }}>Since {fmtDate(user.joinDate)}</div>
+            </div>
+            <div style={cardStyle()}>
+              <div style={{ fontSize: 13, color: "#666", marginBottom: 6 }}>Total Returns</div>
+              <div style={{ fontSize: 28, fontWeight: 700, color: "#27ae60" }}>+{profitPct}%</div>
+              <div style={{ fontSize: 13, color: "#888", marginTop: 4 }}>${fmt(user.profit)} earned</div>
+            </div>
+
+            {/* Recent Transactions */}
+            <div style={{ ...cardStyle(), gridColumn: "1 / -1" }}>
+              <h3 style={{ margin: "0 0 20px", fontSize: 18, fontWeight: 700 }}>Recent Activity</h3>
+              {user.transactions?.slice(0, 5).map(tx => (
+                <div key={tx.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 0", borderBottom: "1px solid #f0f0f0" }}>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 600, textTransform: "capitalize", marginBottom: 2 }}>{tx.type}</div>
+                    <div style={{ fontSize: 12, color: "#888" }}>{fmtDate(tx.date)}</div>
                   </div>
                   <div style={{ fontSize: 14, fontWeight: 700, color: tx.type === "withdrawal" ? "#e74c3c" : "#27ae60" }}>
                     {tx.type === "withdrawal" ? "-" : "+"}${fmt(tx.amount)}
                   </div>
                 </div>
               ))}
-              {(!user.transactions || user.transactions.length === 0) && (
-                <div style={{ color: "#bbb", fontSize: 13, textAlign: "center", padding: "20px 0" }}>No transactions yet</div>
-              )}
             </div>
           </div>
         )}
 
-        {/* PORTFOLIO */}
-        {tab === "portfolio" && (
-          <div>
-            <h2 style={{ margin: "0 0 24px", fontSize: 22, fontWeight: 700, color: "#1a2e4a", fontFamily: "'Playfair Display', serif" }}>My Portfolio</h2>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
-              {[
-                { label: "Investment Plan", value: user.plan, icon: "🏆" },
-                { label: "Principal Invested", value: `$${fmt(user.balance)}`, icon: "💰" },
-                { label: "Total Profit Earned", value: `$${fmt(user.profit)}`, icon: "📈" },
-                { label: "Portfolio Value", value: `$${fmt(totalPortfolio)}`, icon: "💎" },
-                { label: "ROI", value: `${profitPct}%`, icon: "📊" },
-                { label: "Member Since", value: fmtDate(user.joinDate), icon: "📅" },
-              ].map((item, i) => (
-                <div key={i} style={cardStyle()}>
-                  <div style={{ fontSize: 24, marginBottom: 10 }}>{item.icon}</div>
-                  <div style={{ fontSize: 12, color: "#999", textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>{item.label}</div>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: "#1a2e4a" }}>{item.value}</div>
-                </div>
-              ))}
-            </div>
-            <div style={{ ...cardStyle(), marginTop: 16 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: "#1a2e4a", marginBottom: 16 }}>Profit Growth Chart</div>
-              <MiniChart data={user.profitHistory || []} />
-            </div>
-          </div>
-        )}
-
-        {/* TRANSACTIONS */}
+        {/* TRANSACTIONS TAB */}
         {tab === "transactions" && (
-          <div>
+          <div style={{ maxWidth: 800 }}>
             <h2 style={{ margin: "0 0 24px", fontSize: 22, fontWeight: 700, color: "#1a2e4a", fontFamily: "'Playfair Display', serif" }}>Transaction History</h2>
             <div style={cardStyle()}>
-              {(!user.transactions || user.transactions.length === 0) && (
-                <div style={{ textAlign: "center", color: "#bbb", padding: "40px 0" }}>No transactions found</div>
-              )}
-              {(user.transactions || []).map(tx => (
-                <div key={tx.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 0", borderBottom: "1px solid #f5f5f5" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <div style={{ width: 42, height: 42, borderRadius: 12, background: tx.type === "deposit" ? "#e8f5e9" : tx.type === "profit" ? "#fff8e1" : "#fce4ec", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>
-                      {tx.type === "deposit" ? "💵" : tx.type === "profit" ? "📈" : "💸"}
+              {user.transactions?.map(tx => (
+                <div key={tx.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 0", borderBottom: "1px solid #f0f0f0" }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+                      <div style={{ fontSize: 15, fontWeight: 700, textTransform: "capitalize" }}>{tx.type}</div>
+                      <div style={{ padding: "2px 8px", background: "#f0f4f8", borderRadius: 6, fontSize: 11, fontWeight: 700, color: "#666" }}>{tx.status}</div>
                     </div>
-                    <div>
-                      <div style={{ fontSize: 14, fontWeight: 700, textTransform: "capitalize", color: "#1a2e4a" }}>{tx.type}</div>
-                      <div style={{ fontSize: 12, color: "#aaa" }}>{tx.note} · {fmtDate(tx.date)}</div>
-                    </div>
+                    <div style={{ fontSize: 12, color: "#888" }}>{fmtDate(tx.date)}</div>
+                    {tx.note && <div style={{ fontSize: 12, color: "#999", marginTop: 2 }}>{tx.note}</div>}
                   </div>
-                  <div style={{ textAlign: "right" }}>
-                    <div style={{ fontSize: 15, fontWeight: 800, color: tx.type === "withdrawal" ? "#e74c3c" : "#27ae60" }}>
-                      {tx.type === "withdrawal" ? "-" : "+"}${fmt(tx.amount)}
-                    </div>
-                    <div style={{ fontSize: 11, background: "#e8f5e9", color: "#27ae60", padding: "2px 8px", borderRadius: 20, display: "inline-block", fontWeight: 600 }}>✓ {tx.status}</div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: tx.type === "withdrawal" ? "#e74c3c" : "#27ae60" }}>
+                    {tx.type === "withdrawal" ? "-" : "+"}${fmt(tx.amount)}
                   </div>
                 </div>
               ))}
@@ -632,45 +692,384 @@ function UserDashboard({ user: initialUser, onLogout, toast }) {
           </div>
         )}
 
-        {/* WITHDRAW */}
+        {/* WITHDRAW TAB */}
         {tab === "withdraw" && (
           <div style={{ maxWidth: 480 }}>
             <h2 style={{ margin: "0 0 24px", fontSize: 22, fontWeight: 700, color: "#1a2e4a", fontFamily: "'Playfair Display', serif" }}>Withdraw Funds</h2>
-            <div style={{ ...cardStyle(true), marginBottom: 16, textAlign: "center" }}>
-              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", marginBottom: 4 }}>Available Balance</div>
-              <div style={{ fontSize: 36, fontWeight: 800, fontFamily: "'Playfair Display', serif" }}>${fmt(totalPortfolio)}</div>
-            </div>
+            
+            {!pendingWithdraw ? (
+              <>
+                <div style={{ ...cardStyle(true), marginBottom: 16, textAlign: "center" }}>
+                  <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", marginBottom: 4 }}>Available Balance</div>
+                  <div style={{ fontSize: 36, fontWeight: 800, fontFamily: "'Playfair Display', serif" }}>${fmt(totalPortfolio)}</div>
+                </div>
+                <div style={cardStyle()}>
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: "#666", textTransform: "uppercase", letterSpacing: 1, display: "block", marginBottom: 8 }}>Withdrawal Amount (USD)</label>
+                    <input type="number" placeholder="0.00" value={withdrawAmt} onChange={e => setWithdrawAmt(e.target.value)}
+                      style={{ width: "100%", padding: "14px 16px", border: "1.5px solid #e0e0e0", borderRadius: 10, fontSize: 18, fontWeight: 700, color: "#1a2e4a", outline: "none", boxSizing: "border-box" }} />
+                  </div>
+                  <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+                    {[25, 50, 75, 100].map(pct => (
+                      <button key={pct} onClick={() => setWithdrawAmt((totalPortfolio * pct / 100).toFixed(2))}
+                        style={{ flex: 1, padding: "8px", background: "#f0f4f8", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 700, color: "#1a2e4a" }}>{pct}%</button>
+                    ))}
+                  </div>
+                  <div style={{ background: "#fff8e1", border: "1px solid #ffe082", borderRadius: 10, padding: "12px 16px", marginBottom: 16, fontSize: 13, color: "#8a6d00" }}>
+                    ⚠️ You will need to select a withdrawal method and provide a withdrawal code to complete this request.
+                  </div>
+                  <button onClick={initiateWithdraw}
+                    style={{ width: "100%", padding: "15px", background: "linear-gradient(135deg, #b8933f, #d4a853)", color: "#fff", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
+                    Continue →
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Step 1: Select Method */}
+                {withdrawalStep === 1 && (
+                  <div style={cardStyle()}>
+                    <h3 style={{ margin: "0 0 20px", fontSize: 18, fontWeight: 700 }}>Select Withdrawal Method</h3>
+                    <div style={{ marginBottom: 16 }}>
+                      <button 
+                        onClick={() => setWithdrawalMethod("bank")}
+                        style={{
+                          width: "100%",
+                          padding: "20px",
+                          background: withdrawalMethod === "bank" ? "#f0f9ff" : "#fff",
+                          border: withdrawalMethod === "bank" ? "2px solid #3b82f6" : "2px solid #e0e0e0",
+                          borderRadius: 12,
+                          cursor: "pointer",
+                          marginBottom: 12,
+                          textAlign: "left",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 16
+                        }}>
+                        <div style={{ fontSize: 32 }}>🏦</div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 16, fontWeight: 700, color: "#1a2e4a", marginBottom: 4 }}>Bank Transfer</div>
+                          <div style={{ fontSize: 13, color: "#666" }}>Withdraw to your bank account</div>
+                        </div>
+                        {withdrawalMethod === "bank" && <div style={{ fontSize: 20, color: "#3b82f6" }}>✓</div>}
+                      </button>
+                      
+                      <button 
+                        onClick={() => setWithdrawalMethod("crypto")}
+                        style={{
+                          width: "100%",
+                          padding: "20px",
+                          background: withdrawalMethod === "crypto" ? "#f0fdf4" : "#fff",
+                          border: withdrawalMethod === "crypto" ? "2px solid #10b981" : "2px solid #e0e0e0",
+                          borderRadius: 12,
+                          cursor: "pointer",
+                          textAlign: "left",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 16
+                        }}>
+                        <div style={{ fontSize: 32 }}>₿</div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 16, fontWeight: 700, color: "#1a2e4a", marginBottom: 4 }}>Crypto (USDT)</div>
+                          <div style={{ fontSize: 13, color: "#666" }}>Withdraw to USDT wallet (ERC20)</div>
+                        </div>
+                        {withdrawalMethod === "crypto" && <div style={{ fontSize: 20, color: "#10b981" }}>✓</div>}
+                      </button>
+                    </div>
+                    
+                    <div style={{ display: "flex", gap: 12 }}>
+                      <button onClick={cancelWithdrawal}
+                        style={{ flex: 1, padding: "14px", background: "#f5f5f5", color: "#666", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+                        Cancel
+                      </button>
+                      <button onClick={proceedToDetails}
+                        style={{ flex: 1, padding: "14px", background: "linear-gradient(135deg, #1a2e4a, #2a4a70)", color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+                        Continue →
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Step 2: Enter Details */}
+                {withdrawalStep === 2 && (
+                  <div style={cardStyle()}>
+                    <h3 style={{ margin: "0 0 20px", fontSize: 18, fontWeight: 700 }}>
+                      {withdrawalMethod === "bank" ? "Bank Account Details" : "Crypto Wallet Details"}
+                    </h3>
+                    
+                    {withdrawalMethod === "bank" ? (
+                      <>
+                        <div style={{ marginBottom: 14 }}>
+                          <label style={{ fontSize: 12, fontWeight: 700, color: "#666", textTransform: "uppercase", letterSpacing: 1, display: "block", marginBottom: 8 }}>Account Name</label>
+                          <input 
+                            placeholder="John Doe" 
+                            value={paymentDetails.accountName} 
+                            onChange={e => setPaymentDetails(p => ({ ...p, accountName: e.target.value }))} 
+                            style={inputStyle} />
+                        </div>
+                        <div style={{ marginBottom: 14 }}>
+                          <label style={{ fontSize: 12, fontWeight: 700, color: "#666", textTransform: "uppercase", letterSpacing: 1, display: "block", marginBottom: 8 }}>Bank Name</label>
+                          <input 
+                            placeholder="ABC Bank" 
+                            value={paymentDetails.bankName} 
+                            onChange={e => setPaymentDetails(p => ({ ...p, bankName: e.target.value }))} 
+                            style={inputStyle} />
+                        </div>
+                        <div style={{ marginBottom: 20 }}>
+                          <label style={{ fontSize: 12, fontWeight: 700, color: "#666", textTransform: "uppercase", letterSpacing: 1, display: "block", marginBottom: 8 }}>Account Number</label>
+                          <input 
+                            placeholder="1234567890" 
+                            value={paymentDetails.accountNumber} 
+                            onChange={e => setPaymentDetails(p => ({ ...p, accountNumber: e.target.value }))} 
+                            style={inputStyle} />
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div style={{ background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 10, padding: "12px 16px", marginBottom: 16, fontSize: 13, color: "#166534" }}>
+                          ℹ️ Only USDT (ERC20) network is supported. Ensure your wallet supports ERC20 tokens.
+                        </div>
+                        <div style={{ marginBottom: 20 }}>
+                          <label style={{ fontSize: 12, fontWeight: 700, color: "#666", textTransform: "uppercase", letterSpacing: 1, display: "block", marginBottom: 8 }}>USDT Wallet Address (ERC20)</label>
+                          <input 
+                            placeholder="0x..." 
+                            value={paymentDetails.walletAddress} 
+                            onChange={e => setPaymentDetails(p => ({ ...p, walletAddress: e.target.value }))} 
+                            style={inputStyle} />
+                        </div>
+                      </>
+                    )}
+                    
+                    <div style={{ display: "flex", gap: 12 }}>
+                      <button onClick={() => setWithdrawalStep(1)}
+                        style={{ flex: 1, padding: "14px", background: "#f5f5f5", color: "#666", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+                        ← Back
+                      </button>
+                      <button onClick={proceedToCode}
+                        style={{ flex: 1, padding: "14px", background: "linear-gradient(135deg, #1a2e4a, #2a4a70)", color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+                        Continue →
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Step 3: Enter Code and PIN */}
+                {withdrawalStep === 3 && (
+                  <div style={cardStyle()}>
+                    <h3 style={{ margin: "0 0 20px", fontSize: 18, fontWeight: 700 }}>Verify Withdrawal</h3>
+                    
+                    <div style={{ background: "#fff8e1", border: "1px solid #ffe082", borderRadius: 10, padding: "16px", marginBottom: 20, fontSize: 13, color: "#8a6d00" }}>
+                      <div style={{ fontWeight: 700, marginBottom: 8 }}>⚠️ Important:</div>
+                      <div style={{ marginBottom: 4 }}>• A withdrawal code is required to process this transaction</div>
+                      <div style={{ marginBottom: 4 }}>• If you don't have a code, please contact support</div>
+                      <div>• After entering the code, you'll confirm with your security PIN</div>
+                    </div>
+
+                    <div style={{ marginBottom: 16 }}>
+                      <div style={{ fontSize: 13, color: "#666", marginBottom: 12 }}>Withdrawing ${fmt(pendingWithdraw)} to:</div>
+                      {withdrawalMethod === "bank" ? (
+                        <div style={{ background: "#f9fafb", borderRadius: 8, padding: "12px", fontSize: 13 }}>
+                          <div><strong>Account:</strong> {paymentDetails.accountName}</div>
+                          <div><strong>Bank:</strong> {paymentDetails.bankName}</div>
+                          <div><strong>Number:</strong> {paymentDetails.accountNumber}</div>
+                        </div>
+                      ) : (
+                        <div style={{ background: "#f9fafb", borderRadius: 8, padding: "12px", fontSize: 12, wordBreak: "break-all" }}>
+                          <div><strong>USDT Wallet (ERC20):</strong></div>
+                          <div style={{ marginTop: 4 }}>{paymentDetails.walletAddress}</div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ marginBottom: 20 }}>
+                      <label style={{ fontSize: 12, fontWeight: 700, color: "#666", textTransform: "uppercase", letterSpacing: 1, display: "block", marginBottom: 8 }}>Withdrawal Code</label>
+                      <input 
+                        type="text"
+                        placeholder="Enter your withdrawal code" 
+                        value={withdrawalCode} 
+                        onChange={e => setWithdrawalCode(e.target.value)} 
+                        style={inputStyle} />
+                      <div style={{ fontSize: 11, color: "#888", marginTop: 6 }}>
+                        Don't have a code? <button onClick={() => setShowSupportChat(true)} style={{ background: "none", border: "none", color: "#b8933f", cursor: "pointer", textDecoration: "underline", padding: 0, fontSize: 11 }}>Contact support</button>
+                      </div>
+                    </div>
+                    
+                    <div style={{ display: "flex", gap: 12 }}>
+                      <button onClick={() => setWithdrawalStep(2)}
+                        style={{ flex: 1, padding: "14px", background: "#f5f5f5", color: "#666", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+                        ← Back
+                      </button>
+                      <button onClick={() => setShowPin(true)}
+                        style={{ flex: 1, padding: "14px", background: "linear-gradient(135deg, #b8933f, #d4a853)", color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+                        Confirm with PIN
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* PROFILE/SETTINGS TAB */}
+        {tab === "profile" && (
+          <div style={{ maxWidth: 600 }}>
+            <h2 style={{ margin: "0 0 24px", fontSize: 22, fontWeight: 700, color: "#1a2e4a", fontFamily: "'Playfair Display', serif" }}>Account Settings</h2>
             <div style={cardStyle()}>
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: "#666", textTransform: "uppercase", letterSpacing: 1, display: "block", marginBottom: 8 }}>Withdrawal Amount (USD)</label>
-                <input type="number" placeholder="0.00" value={withdrawAmt} onChange={e => setWithdrawAmt(e.target.value)}
-                  style={{ width: "100%", padding: "14px 16px", border: "1.5px solid #e0e0e0", borderRadius: 10, fontSize: 18, fontWeight: 700, color: "#1a2e4a", outline: "none", boxSizing: "border-box" }} />
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#666", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>Name</div>
+                <div style={{ fontSize: 16, color: "#1a2e4a" }}>{user.name}</div>
               </div>
-              <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
-                {[25, 50, 75, 100].map(pct => (
-                  <button key={pct} onClick={() => setWithdrawAmt((totalPortfolio * pct / 100).toFixed(2))}
-                    style={{ flex: 1, padding: "8px", background: "#f0f4f8", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 700, color: "#1a2e4a" }}>{pct}%</button>
-                ))}
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#666", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>Email</div>
+                <div style={{ fontSize: 16, color: "#1a2e4a" }}>{user.email}</div>
               </div>
-              <div style={{ background: "#fff8e1", border: "1px solid #ffe082", borderRadius: 10, padding: "12px 16px", marginBottom: 16, fontSize: 13, color: "#8a6d00" }}>
-                🔐 A security PIN confirmation will be required to process your withdrawal.
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#666", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>Member Since</div>
+                <div style={{ fontSize: 16, color: "#1a2e4a" }}>{fmtDate(user.joinDate)}</div>
               </div>
-              <button onClick={initiateWithdraw}
-                style={{ width: "100%", padding: "15px", background: "linear-gradient(135deg, #b8933f, #d4a853)", color: "#fff", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
-                Request Withdrawal →
-              </button>
+              <div style={{ padding: "16px", background: "#f9fafb", borderRadius: 10, fontSize: 13, color: "#666" }}>
+                To update your profile or change your password/PIN, please contact support.
+              </div>
             </div>
           </div>
         )}
       </div>
 
+      {/* PIN Modal */}
       {showPin && (
         <PinModal
           amount={pendingWithdraw}
           loading={withdrawLoading}
           onConfirm={confirmWithdraw}
-          onCancel={() => { setShowPin(false); setPendingWithdraw(null); }}
+          onCancel={() => { setShowPin(false); }}
         />
+      )}
+
+      {/* Support Chat Modal */}
+      {showSupportChat && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1001, display: "flex", alignItems: "flex-end", justifyContent: "flex-end", padding: 20 }}>
+          <div style={{ 
+            background: "#fff", 
+            borderRadius: 16, 
+            width: "100%", 
+            maxWidth: 400, 
+            height: "600px", 
+            maxHeight: "80vh",
+            boxShadow: "0 24px 80px rgba(0,0,0,0.3)",
+            display: "flex",
+            flexDirection: "column"
+          }}>
+            {/* Chat Header */}
+            <div style={{ 
+              background: "linear-gradient(135deg, #1a2e4a, #2a4a70)", 
+              color: "#fff", 
+              padding: "20px", 
+              borderTopLeftRadius: 16, 
+              borderTopRightRadius: 16,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center"
+            }}>
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 2 }}>Customer Support</div>
+                <div style={{ fontSize: 12, opacity: 0.8 }}>We typically reply within 24 hours</div>
+              </div>
+              <button onClick={() => setShowSupportChat(false)} style={{ 
+                background: "rgba(255,255,255,0.2)", 
+                border: "none", 
+                color: "#fff", 
+                cursor: "pointer", 
+                fontSize: 20, 
+                width: 32,
+                height: 32,
+                borderRadius: 8,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center"
+              }}>×</button>
+            </div>
+
+            {/* Chat Messages */}
+            <div style={{ 
+              flex: 1, 
+              overflowY: "auto", 
+              padding: 20,
+              background: "#f9fafb"
+            }}>
+              {chatMessages.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "40px 20px", color: "#888" }}>
+                  <div style={{ fontSize: 40, marginBottom: 12 }}>💬</div>
+                  <div style={{ fontSize: 14 }}>No messages yet.</div>
+                  <div style={{ fontSize: 13, marginTop: 4 }}>Send a message to get help from our support team.</div>
+                </div>
+              ) : (
+                chatMessages.map(msg => (
+                  <div key={msg.id} style={{ 
+                    marginBottom: 16,
+                    display: "flex",
+                    justifyContent: msg.sender === "user" ? "flex-end" : "flex-start"
+                  }}>
+                    <div style={{
+                      maxWidth: "75%",
+                      background: msg.sender === "user" ? "linear-gradient(135deg, #1a2e4a, #2a4a70)" : "#fff",
+                      color: msg.sender === "user" ? "#fff" : "#1a2e4a",
+                      padding: "12px 16px",
+                      borderRadius: 12,
+                      boxShadow: "0 2px 8px rgba(0,0,0,0.1)"
+                    }}>
+                      <div style={{ fontSize: 14, lineHeight: 1.5, marginBottom: 4 }}>{msg.message}</div>
+                      <div style={{ fontSize: 11, opacity: 0.7 }}>{fmtDate(msg.createdAt)}</div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Chat Input */}
+            <div style={{ 
+              padding: 16, 
+              borderTop: "1px solid #e0e0e0",
+              background: "#fff",
+              borderBottomLeftRadius: 16,
+              borderBottomRightRadius: 16
+            }}>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input 
+                  type="text"
+                  placeholder="Type your message..."
+                  value={chatInput}
+                  onChange={e => setChatInput(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && sendSupportMessage()}
+                  disabled={chatLoading}
+                  style={{
+                    flex: 1,
+                    padding: "12px",
+                    border: "1.5px solid #e0e0e0",
+                    borderRadius: 10,
+                    fontSize: 14,
+                    outline: "none"
+                  }}
+                />
+                <button 
+                  onClick={sendSupportMessage}
+                  disabled={chatLoading || !chatInput.trim()}
+                  style={{
+                    padding: "12px 20px",
+                    background: chatLoading || !chatInput.trim() ? "#ccc" : "linear-gradient(135deg, #b8933f, #d4a853)",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: 10,
+                    fontSize: 14,
+                    fontWeight: 700,
+                    cursor: chatLoading || !chatInput.trim() ? "default" : "pointer"
+                  }}>
+                  {chatLoading ? "..." : "Send"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -680,35 +1079,57 @@ function UserDashboard({ user: initialUser, onLogout, toast }) {
 // ADMIN DASHBOARD
 // ════════════════════════════════════════════════════════
 function AdminDashboard({ onLogout, toast }) {
-  const [tab, setTab] = useState("users");
+  const [tab, setTab] = useState("overview");
   const [users, setUsers] = useState([]);
-  const [stats, setStats] = useState({ totalClients: 0, totalAUM: 0, totalProfit: 0 });
-  const [selected, setSelected] = useState(null);
-  const [editForm, setEditForm] = useState({});
-  const [msgForm, setMsgForm] = useState({ userId: "all", subject: "", body: "" });
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [selected, setSelected] = useState(null);
+  const [editForm, setEditForm] = useState({ balance: "", profit: "", plan: "Starter" });
   const [saveLoading, setSaveLoading] = useState(false);
+  const [msgForm, setMsgForm] = useState({ userId: "all", subject: "", body: "" });
   const [notifyLoading, setNotifyLoading] = useState(false);
+  const [supportMessages, setSupportMessages] = useState([]);
+  const [selectedSupport, setSelectedSupport] = useState(null);
+  const [supportReply, setSupportReply] = useState("");
+  const [replyLoading, setReplyLoading] = useState(false);
 
-  const loadData = useCallback(async () => {
+  const loadDashboard = useCallback(async () => {
     setLoading(true);
     try {
-      const [dashRes, usersRes] = await Promise.all([
-        apiFetch("/api/admin/dashboard"),
-        apiFetch("/api/admin/users"),
-      ]);
-      setStats(dashRes.data.stats);
-      setUsers(usersRes.data);
+      const res = await apiFetch("/admin/dashboard");
+      setStats(res.data.stats);
     } catch (e) {
-      if (e.message === "SESSION_EXPIRED") onLogout();
-      else toast("Error", e.message, "error");
+      toast("Error", e.message, "error");
     } finally {
       setLoading(false);
     }
-  }, [onLogout, toast]);
+  }, [toast]);
 
-  useEffect(() => { loadData(); }, []);
+  const loadUsers = useCallback(async () => {
+    try {
+      const res = await apiFetch("/admin/users");
+      setUsers(res.data);
+    } catch (e) {
+      toast("Error", e.message, "error");
+    }
+  }, [toast]);
+
+  const loadSupportMessages = useCallback(async () => {
+    try {
+      const res = await apiFetch("/admin/support/messages");
+      if (res.success) {
+        setSupportMessages(res.data || []);
+      }
+    } catch (e) {
+      console.error("Failed to load support messages:", e);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadDashboard();
+    loadUsers();
+    loadSupportMessages();
+  }, []);
 
   const openEdit = (u) => {
     setSelected(u.id);
@@ -716,18 +1137,14 @@ function AdminDashboard({ onLogout, toast }) {
   };
 
   const saveEdit = async () => {
-    if (!selected) return;
     setSaveLoading(true);
     try {
-      const res = await apiFetch(`/api/admin/users/${selected}/portfolio`, {
+      await apiFetch(`/admin/users/${selected}/portfolio`, {
         method: "PUT",
-        body: { balance: editForm.balance, profit: editForm.profit, plan: editForm.plan },
+        body: editForm,
       });
-      toast("✅ Updated", "User investment details updated successfully.", "success");
-      const targetUser = users.find(u => u.id === selected);
-      toast("📧 Email Sent", `Balance update notification sent to ${targetUser?.email}`, "email");
-      // Refresh user list
-      await loadData();
+      toast("Success", "Portfolio updated and client notified.", "success");
+      loadUsers();
       setSelected(null);
     } catch (e) {
       toast("Error", e.message, "error");
@@ -737,14 +1154,14 @@ function AdminDashboard({ onLogout, toast }) {
   };
 
   const sendNotification = async () => {
-    if (!msgForm.subject || !msgForm.body) { toast("Error", "Subject and message are required.", "error"); return; }
+    if (!msgForm.subject || !msgForm.body) {
+      toast("Error", "Subject and message required.", "error");
+      return;
+    }
     setNotifyLoading(true);
     try {
-      const res = await apiFetch("/api/admin/notify", {
-        method: "POST",
-        body: { userId: msgForm.userId === "all" ? "all" : msgForm.userId, subject: msgForm.subject, body: msgForm.body },
-      });
-      toast("📧 Notification Sent", res.message, "email");
+      await apiFetch("/admin/notify", { method: "POST", body: msgForm });
+      toast("Email Sent", `Notification sent to ${msgForm.userId === "all" ? "all clients" : "client"}`, "success");
       setMsgForm({ userId: "all", subject: "", body: "" });
     } catch (e) {
       toast("Error", e.message, "error");
@@ -753,118 +1170,149 @@ function AdminDashboard({ onLogout, toast }) {
     }
   };
 
-  const inputStyle = { width: "100%", padding: "11px 14px", border: "1.5px solid #e0e0e0", borderRadius: 8, fontSize: 14, color: "#1a2e4a", outline: "none", boxSizing: "border-box" };
-  const totalAUM = stats.totalAUM || users.reduce((s, u) => s + (u.balance || 0) + (u.profit || 0), 0);
-  const totalProfit = stats.totalProfit || users.reduce((s, u) => s + (u.profit || 0), 0);
+  const sendSupportReply = async () => {
+    if (!supportReply.trim() || !selectedSupport) return;
+    
+    setReplyLoading(true);
+    try {
+      const res = await apiFetch("/admin/support/reply", {
+        method: "POST",
+        body: {
+          messageId: selectedSupport.id,
+          reply: supportReply
+        }
+      });
+      
+      if (res.success) {
+        toast("Reply Sent", "Your reply has been sent to the user.", "success");
+        setSupportReply("");
+        setSelectedSupport(null);
+        loadSupportMessages();
+      }
+    } catch (e) {
+      toast("Error", "Failed to send reply.", "error");
+    } finally {
+      setReplyLoading(false);
+    }
+  };
+
+  const cardStyle = (gradient = false) => ({
+    background: gradient ? "linear-gradient(135deg, #1a2e4a, #2a4a70)" : "#fff",
+    borderRadius: 16,
+    padding: "24px 28px",
+    boxShadow: "0 2px 16px rgba(0,0,0,0.06)",
+    color: gradient ? "#fff" : "#1a2e4a"
+  });
+
+  const inputStyle = { 
+    width: "100%", 
+    padding: "14px 16px", 
+    border: "1.5px solid #e0e0e0", 
+    borderRadius: 10, 
+    fontSize: 15, 
+    outline: "none", 
+    boxSizing: "border-box" 
+  };
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f0f2f5", fontFamily: "'Montserrat', sans-serif" }}>
-      <header style={{ background: "linear-gradient(135deg, #0d1e33, #1a2e4a)", padding: "0 20px", position: "sticky", top: 0, zIndex: 100 }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", height: 64 }}>
+    <div style={{ minHeight: "100vh", background: "#f5f7fa" }}>
+      {/* Header */}
+      <div style={{ background: "linear-gradient(135deg, #0d1e33, #1a2e4a)", padding: "20px 24px", boxShadow: "0 2px 16px rgba(0,0,0,0.1)" }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, #b8933f, #d4a853)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 13 }}>PV</div>
-            <div>
-              <div style={{ color: "#fff", fontWeight: 700, fontSize: 16, fontFamily: "'Playfair Display', serif" }}>Prime<span style={{ color: "#d4a853" }}>Vest</span></div>
-              <div style={{ color: "#d4a853", fontSize: 10, fontWeight: 700, letterSpacing: 2 }}>ADMIN PANEL</div>
-            </div>
+            <Logo size="sm" />
+            <div style={{ color: "#b8933f", fontSize: 13, fontWeight: 700, padding: "4px 12px", background: "rgba(184,147,63,0.15)", borderRadius: 6 }}>ADMIN</div>
           </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <button onClick={loadData} disabled={loading} style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 8, padding: "7px 14px", color: "#fff", cursor: "pointer", fontSize: 12 }}>
-              {loading ? <Spinner size={14} color="#fff" /> : "🔄 Refresh"}
-            </button>
-            <div style={{ position: "relative" }}>
-              <button onClick={() => setMenuOpen(p => !p)} style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 8, padding: "8px 16px", color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
-                Admin ▾
-              </button>
-              {menuOpen && (
-                <div style={{ position: "absolute", right: 0, top: 44, background: "#fff", borderRadius: 10, padding: "8px 0", boxShadow: "0 8px 32px rgba(0,0,0,0.2)", minWidth: 140, zIndex: 200 }}>
-                  <button onClick={onLogout} style={{ width: "100%", padding: "12px 20px", background: "none", border: "none", textAlign: "left", color: "#e74c3c", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Sign Out</button>
-                </div>
-              )}
-            </div>
-          </div>
+          <button onClick={onLogout} style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 8, padding: "8px 16px", color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
+            🚪 Sign Out
+          </button>
         </div>
-      </header>
+      </div>
 
-      <nav style={{ background: "#fff", borderBottom: "1px solid #e0e0e0", padding: "0 20px" }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto", display: "flex", gap: 4, overflowX: "auto" }}>
-          {[["users", "👥 Clients"], ["update", "✏️ Update Portfolio"], ["notify", "📧 Notifications"]].map(([id, label]) => (
-            <button key={id} onClick={() => setTab(id)}
-              style={{ padding: "14px 20px", border: "none", background: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, color: tab === id ? "#1a2e4a" : "#999", borderBottom: `2px solid ${tab === id ? "#b8933f" : "transparent"}`, whiteSpace: "nowrap" }}>
-              {label}
-            </button>
-          ))}
-        </div>
-      </nav>
-
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "24px 16px" }}>
-        {/* Stats */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14, marginBottom: 24 }}>
+      {/* Main Content */}
+      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "32px 24px" }}>
+        {/* Navigation */}
+        <div style={{ display: "flex", gap: 12, marginBottom: 32, overflowX: "auto" }}>
           {[
-            { label: "Total Clients", value: stats.totalClients || users.length, icon: "👥", color: "#1a2e4a" },
-            { label: "Assets Under Mgmt", value: `$${fmt(totalAUM)}`, icon: "💰", color: "#b8933f" },
-            { label: "Total Profits Paid", value: `$${fmt(totalProfit)}`, icon: "📈", color: "#27ae60" },
-          ].map((s, i) => (
-            <div key={i} style={{ background: "#fff", borderRadius: 14, padding: "20px", boxShadow: "0 2px 12px rgba(0,0,0,0.06)", border: "1px solid #f0f0f0" }}>
-              <div style={{ fontSize: 24, marginBottom: 8 }}>{s.icon}</div>
-              <div style={{ fontSize: 11, color: "#aaa", textTransform: "uppercase", letterSpacing: 1 }}>{s.label}</div>
-              <div style={{ fontSize: 22, fontWeight: 800, color: s.color, marginTop: 4 }}>{s.value}</div>
-            </div>
+            { id: "overview", icon: "📊", label: "Overview" },
+            { id: "users", icon: "👥", label: "Clients" },
+            { id: "portfolio", icon: "💼", label: "Update Portfolio" },
+            { id: "notify", icon: "📧", label: "Send Email" },
+            { id: "support", icon: "💬", label: "Support Messages" },
+          ].map(item => (
+            <button key={item.id} onClick={() => setTab(item.id)}
+              style={{
+                padding: "12px 20px", background: tab === item.id ? "#fff" : "transparent",
+                border: tab === item.id ? "2px solid #b8933f" : "2px solid transparent", borderRadius: 12,
+                fontSize: 14, fontWeight: 700, color: tab === item.id ? "#1a2e4a" : "#666",
+                cursor: "pointer", display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap",
+                boxShadow: tab === item.id ? "0 2px 8px rgba(0,0,0,0.08)" : "none"
+              }}>
+              <span>{item.icon}</span>
+              <span>{item.label}</span>
+            </button>
           ))}
         </div>
 
-        {/* CLIENTS TAB */}
-        {tab === "users" && (
-          <div style={{ background: "#fff", borderRadius: 16, boxShadow: "0 2px 16px rgba(0,0,0,0.06)", overflow: "hidden" }}>
-            <div style={{ padding: "20px 24px", borderBottom: "1px solid #f0f0f0" }}>
-              <div style={{ fontWeight: 700, fontSize: 16, color: "#1a2e4a" }}>All Clients ({users.length})</div>
+        {/* OVERVIEW TAB */}
+        {tab === "overview" && stats && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 20 }}>
+            <div style={cardStyle(true)}>
+              <div style={{ fontSize: 13, opacity: 0.7, marginBottom: 6 }}>Total Clients</div>
+              <div style={{ fontSize: 40, fontWeight: 800, fontFamily: "'Playfair Display', serif" }}>{stats.totalClients}</div>
             </div>
-            {loading ? (
-              <div style={{ padding: "40px", textAlign: "center" }}><Spinner size={32} /></div>
-            ) : (
+            <div style={cardStyle()}>
+              <div style={{ fontSize: 13, color: "#666", marginBottom: 6 }}>Total AUM</div>
+              <div style={{ fontSize: 32, fontWeight: 700, color: "#b8933f" }}>${fmt(stats.totalAUM)}</div>
+            </div>
+            <div style={cardStyle()}>
+              <div style={{ fontSize: 13, color: "#666", marginBottom: 6 }}>Client Balances</div>
+              <div style={{ fontSize: 32, fontWeight: 700, color: "#3b82f6" }}>${fmt(stats.totalBalance)}</div>
+            </div>
+            <div style={cardStyle()}>
+              <div style={{ fontSize: 13, color: "#666", marginBottom: 6 }}>Total Profits</div>
+              <div style={{ fontSize: 32, fontWeight: 700, color: "#27ae60" }}>${fmt(stats.totalProfit)}</div>
+            </div>
+          </div>
+        )}
+
+        {/* USERS TAB */}
+        {tab === "users" && (
+          <div>
+            <h3 style={{ margin: "0 0 20px", color: "#1a2e4a", fontFamily: "'Playfair Display', serif" }}>All Clients</h3>
+            <div style={cardStyle()}>
               <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
                   <thead>
-                    <tr style={{ background: "#f8f9fa" }}>
-                      {["Client", "Email", "Plan", "Balance", "Profit", "Portfolio", "Actions"].map(h => (
-                        <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, color: "#999", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8, whiteSpace: "nowrap" }}>{h}</th>
-                      ))}
+                    <tr style={{ borderBottom: "2px solid #f0f0f0" }}>
+                      <th style={{ padding: "12px 8px", textAlign: "left", fontWeight: 700, color: "#666", fontSize: 12, textTransform: "uppercase" }}>Name</th>
+                      <th style={{ padding: "12px 8px", textAlign: "left", fontWeight: 700, color: "#666", fontSize: 12, textTransform: "uppercase" }}>Email</th>
+                      <th style={{ padding: "12px 8px", textAlign: "left", fontWeight: 700, color: "#666", fontSize: 12, textTransform: "uppercase" }}>Plan</th>
+                      <th style={{ padding: "12px 8px", textAlign: "right", fontWeight: 700, color: "#666", fontSize: 12, textTransform: "uppercase" }}>Balance</th>
+                      <th style={{ padding: "12px 8px", textAlign: "right", fontWeight: 700, color: "#666", fontSize: 12, textTransform: "uppercase" }}>Profit</th>
+                      <th style={{ padding: "12px 8px", textAlign: "right", fontWeight: 700, color: "#666", fontSize: 12, textTransform: "uppercase" }}>Portfolio</th>
                     </tr>
                   </thead>
                   <tbody>
                     {users.map(u => (
                       <tr key={u.id} style={{ borderBottom: "1px solid #f5f5f5" }}>
-                        <td style={{ padding: "14px 16px" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <div style={{ width: 34, height: 34, borderRadius: "50%", background: "linear-gradient(135deg, #1a2e4a, #b8933f)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 13 }}>{u.name?.[0]}</div>
-                            <div style={{ fontSize: 13, fontWeight: 700, color: "#1a2e4a" }}>{u.name}</div>
-                          </div>
-                        </td>
-                        <td style={{ padding: "14px 16px", fontSize: 13, color: "#666" }}>{u.email}</td>
-                        <td style={{ padding: "14px 16px" }}><span style={{ background: "#e8f0fe", color: "#1a2e4a", padding: "4px 10px", borderRadius: 20, fontSize: 11, fontWeight: 700 }}>{u.plan}</span></td>
-                        <td style={{ padding: "14px 16px", fontSize: 13, fontWeight: 700, color: "#1a2e4a" }}>${fmt(u.balance)}</td>
-                        <td style={{ padding: "14px 16px", fontSize: 13, fontWeight: 700, color: "#27ae60" }}>+${fmt(u.profit)}</td>
-                        <td style={{ padding: "14px 16px", fontSize: 13, fontWeight: 700, color: "#b8933f" }}>${fmt(u.portfolio)}</td>
-                        <td style={{ padding: "14px 16px" }}>
-                          <button onClick={() => { setTab("update"); openEdit(u); }}
-                            style={{ background: "#1a2e4a", color: "#fff", border: "none", borderRadius: 7, padding: "7px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-                            Edit
-                          </button>
-                        </td>
+                        <td style={{ padding: "14px 8px", fontWeight: 600 }}>{u.name}</td>
+                        <td style={{ padding: "14px 8px", color: "#666" }}>{u.email}</td>
+                        <td style={{ padding: "14px 8px" }}><span style={{ padding: "4px 10px", background: "#f0f4f8", borderRadius: 6, fontSize: 12, fontWeight: 700 }}>{u.plan}</span></td>
+                        <td style={{ padding: "14px 8px", textAlign: "right", fontWeight: 600 }}>${fmt(u.balance)}</td>
+                        <td style={{ padding: "14px 8px", textAlign: "right", fontWeight: 600, color: "#27ae60" }}>${fmt(u.profit)}</td>
+                        <td style={{ padding: "14px 8px", textAlign: "right", fontWeight: 700, color: "#1a2e4a" }}>${fmt(u.portfolio)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-                {users.length === 0 && (
-                  <div style={{ padding: "40px", textAlign: "center", color: "#bbb" }}>No clients found</div>
-                )}
               </div>
-            )}
+            </div>
           </div>
         )}
 
-        {/* UPDATE TAB */}
-        {tab === "update" && (
+        {/* PORTFOLIO UPDATE TAB */}
+        {tab === "portfolio" && (
           <div style={{ maxWidth: 560 }}>
             <h3 style={{ margin: "0 0 20px", color: "#1a2e4a", fontFamily: "'Playfair Display', serif" }}>Update Client Portfolio</h3>
             <div style={{ background: "#fff", borderRadius: 16, padding: "28px", boxShadow: "0 2px 16px rgba(0,0,0,0.06)", marginBottom: 16 }}>
@@ -935,7 +1383,129 @@ function AdminDashboard({ onLogout, toast }) {
             </div>
           </div>
         )}
+
+        {/* SUPPORT MESSAGES TAB */}
+        {tab === "support" && (
+          <div style={{ maxWidth: 800 }}>
+            <h3 style={{ margin: "0 0 20px", color: "#1a2e4a", fontFamily: "'Playfair Display', serif" }}>Support Messages</h3>
+            <div style={cardStyle()}>
+              {supportMessages.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "40px 20px", color: "#888" }}>
+                  <div style={{ fontSize: 48, marginBottom: 12 }}>💬</div>
+                  <div style={{ fontSize: 16 }}>No support messages yet</div>
+                </div>
+              ) : (
+                supportMessages.map(msg => (
+                  <div key={msg.id} style={{ 
+                    padding: "16px", 
+                    marginBottom: 12, 
+                    background: msg.adminReply ? "#f9fafb" : "#fff8e1", 
+                    borderRadius: 10,
+                    border: msg.adminReply ? "1px solid #e0e0e0" : "1px solid #ffe082"
+                  }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 8 }}>
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 2 }}>{msg.userName}</div>
+                        <div style={{ fontSize: 12, color: "#888" }}>{msg.userEmail}</div>
+                      </div>
+                      <div style={{ fontSize: 11, color: "#888" }}>{fmtDate(msg.createdAt)}</div>
+                    </div>
+                    <div style={{ fontSize: 14, color: "#1a2e4a", marginBottom: msg.adminReply ? 12 : 0 }}>{msg.message}</div>
+                    {msg.adminReply && (
+                      <div style={{ 
+                        marginTop: 12, 
+                        paddingTop: 12, 
+                        borderTop: "1px solid #e0e0e0",
+                        fontSize: 13,
+                        color: "#666"
+                      }}>
+                        <div style={{ fontWeight: 700, marginBottom: 4, color: "#b8933f" }}>Your Reply:</div>
+                        {msg.adminReply}
+                      </div>
+                    )}
+                    {!msg.adminReply && (
+                      <button 
+                        onClick={() => setSelectedSupport(msg)}
+                        style={{
+                          marginTop: 12,
+                          padding: "8px 16px",
+                          background: "linear-gradient(135deg, #1a2e4a, #2a4a70)",
+                          color: "#fff",
+                          border: "none",
+                          borderRadius: 8,
+                          fontSize: 13,
+                          fontWeight: 600,
+                          cursor: "pointer"
+                        }}>
+                        Reply
+                      </button>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Support Reply Modal */}
+      {selectedSupport && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ background: "#fff", borderRadius: 20, padding: "32px", maxWidth: 500, width: "100%", boxShadow: "0 24px 80px rgba(0,0,0,0.3)" }}>
+            <h3 style={{ margin: "0 0 20px", fontSize: 20, fontWeight: 700, color: "#1a2e4a" }}>Reply to {selectedSupport.userName}</h3>
+            
+            <div style={{ background: "#f9fafb", borderRadius: 10, padding: "16px", marginBottom: 20 }}>
+              <div style={{ fontSize: 13, color: "#666", marginBottom: 8 }}>User's Message:</div>
+              <div style={{ fontSize: 14, color: "#1a2e4a" }}>{selectedSupport.message}</div>
+            </div>
+
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: "#666", textTransform: "uppercase", letterSpacing: 1, display: "block", marginBottom: 8 }}>Your Reply</label>
+              <textarea 
+                placeholder="Type your reply here..."
+                value={supportReply}
+                onChange={e => setSupportReply(e.target.value)}
+                style={{ ...inputStyle, height: 120, resize: "vertical" }}
+              />
+            </div>
+
+            <div style={{ display: "flex", gap: 12 }}>
+              <button 
+                onClick={() => { setSelectedSupport(null); setSupportReply(""); }}
+                disabled={replyLoading}
+                style={{ 
+                  flex: 1, 
+                  padding: "14px", 
+                  background: "#f5f5f5", 
+                  color: "#666", 
+                  border: "none", 
+                  borderRadius: 10, 
+                  fontSize: 14, 
+                  fontWeight: 700, 
+                  cursor: "pointer" 
+                }}>
+                Cancel
+              </button>
+              <button 
+                onClick={sendSupportReply}
+                disabled={replyLoading || !supportReply.trim()}
+                style={{ 
+                  flex: 1, 
+                  padding: "14px", 
+                  background: replyLoading || !supportReply.trim() ? "#ccc" : "linear-gradient(135deg, #b8933f, #d4a853)", 
+                  color: "#fff", 
+                  border: "none", 
+                  borderRadius: 10, 
+                  fontSize: 14, 
+                  fontWeight: 700, 
+                  cursor: replyLoading || !supportReply.trim() ? "default" : "pointer" 
+                }}>
+                {replyLoading ? "Sending..." : "Send Reply"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
