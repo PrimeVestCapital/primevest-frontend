@@ -374,7 +374,7 @@ function UserDashboard({ user: initialUser, onLogout, toast }) {
   const refreshUser = useCallback(async () => {
     try {
       setDataLoading(true);
-      const res = await apiFetch("/users/me");
+      const res = await apiFetch("/api/users/me");
       setUser(res.data);
     } catch (e) {
       if (e.message === "SESSION_EXPIRED") onLogout();
@@ -386,7 +386,7 @@ function UserDashboard({ user: initialUser, onLogout, toast }) {
   // Load support messages
   const loadSupportMessages = useCallback(async () => {
     try {
-      const res = await apiFetch("/users/support/messages");
+      const res = await apiFetch("/api/users/support/messages");
       if (res.success) {
         setChatMessages(res.data || []);
       }
@@ -1096,7 +1096,7 @@ function AdminDashboard({ onLogout, toast }) {
   const loadDashboard = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await apiFetch("/admin/dashboard");
+      const res = await apiFetch("/api/admin/dashboard");
       setStats(res.data.stats);
     } catch (e) {
       toast("Error", e.message, "error");
@@ -1107,7 +1107,7 @@ function AdminDashboard({ onLogout, toast }) {
 
   const loadUsers = useCallback(async () => {
     try {
-      const res = await apiFetch("/admin/users");
+      const res = await apiFetch("/api/admin/users");
       setUsers(res.data);
     } catch (e) {
       toast("Error", e.message, "error");
@@ -1116,7 +1116,7 @@ function AdminDashboard({ onLogout, toast }) {
 
   const loadSupportMessages = useCallback(async () => {
     try {
-      const res = await apiFetch("/admin/support/messages");
+      const res = await apiFetch("/api/admin/support/messages");
       if (res.success) {
         setSupportMessages(res.data || []);
       }
@@ -1139,7 +1139,7 @@ function AdminDashboard({ onLogout, toast }) {
   const saveEdit = async () => {
     setSaveLoading(true);
     try {
-      await apiFetch(`/admin/users/${selected}/portfolio`, {
+      await apiFetch(`/api/admin/users/${selected}/portfolio`, {
         method: "PUT",
         body: editForm,
       });
@@ -1160,7 +1160,7 @@ function AdminDashboard({ onLogout, toast }) {
     }
     setNotifyLoading(true);
     try {
-      await apiFetch("/admin/notify", { method: "POST", body: msgForm });
+      await apiFetch("/api/admin/notify", { method: "POST", body: msgForm });
       toast("Email Sent", `Notification sent to ${msgForm.userId === "all" ? "all clients" : "client"}`, "success");
       setMsgForm({ userId: "all", subject: "", body: "" });
     } catch (e) {
@@ -1175,7 +1175,7 @@ function AdminDashboard({ onLogout, toast }) {
     
     setReplyLoading(true);
     try {
-      const res = await apiFetch("/admin/support/reply", {
+      const res = await apiFetch("/api/admin/support/reply", {
         method: "POST",
         body: {
           messageId: selectedSupport.id,
