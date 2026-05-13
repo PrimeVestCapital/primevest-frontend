@@ -6,7 +6,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 // ─── API Configuration ───────────────────────────────────
 // In dev: Vite proxies /api → http://localhost:5000/api (see vite.config.js)
 // In prod: set VITE_API_URL in your .env file
-const BASE_URL = import.meta.env?.VITE_API_URL || "/api";
+const BASE_URL = import.meta.env?.VITE_API_URL || "http://localhost:5000";
 
 // ─── Token Storage ────────────────────────────────────────
 const TOKEN_KEY = "pv_access_token";
