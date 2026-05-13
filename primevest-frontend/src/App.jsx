@@ -1410,16 +1410,29 @@ function AdminDashboard({ onLogout, toast }) {
                       </div>
                       <div style={{ fontSize: 11, color: "#888" }}>{fmtDate(msg.createdAt)}</div>
                     </div>
-                    <div style={{ fontSize: 14, color: "#1a2e4a", marginBottom: msg.adminReply ? 12 : 0 }}>{msg.message}</div>
+                    <div style={{ fontSize: 14, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
+                      {msg.message}
+                    </div>
                     {msg.adminReply && (
-                      <div style={{ 
-                        marginTop: 12, 
-                        paddingTop: 12, 
-                        borderTop: "1px solid #e0e0e0",
+                      <div style={{
+                        marginTop: 10,
+                        padding: "10px 12px",
+                        borderRadius: 10,
+                        background: "rgba(184,147,63,0.08)",
+                        border: "1px solid rgba(184,147,63,0.25)",
                         fontSize: 13,
-                        color: "#666"
+                        whiteSpace: "pre-wrap"
                       }}>
-                        <div style={{ fontWeight: 700, marginBottom: 4, color: "#b8933f" }}>Your Reply:</div>
+                        <div style={{ 
+                          fontWeight: 700, 
+                          marginBottom: 6, 
+                          color: "#b8933f",
+                          fontSize: 12,
+                          textTransform: "uppercase",
+                          letterSpacing: 0.5
+                        }}>
+                          Support Reply
+                        </div>
                         {msg.adminReply}
                       </div>
                     )}
