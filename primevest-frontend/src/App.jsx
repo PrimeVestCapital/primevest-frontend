@@ -997,61 +997,103 @@ const loadSupportMessages = useCallback(async () => {
             </div>
 
             {/* Chat Messages */}
-            <div style={{ 
-              flex: 1, 
-              overflowY: "auto", 
-              padding: 20,
-              background: "#f9fafb"
-            }}>
+            <div
+              style={{
+                flex: 1,
+                overflowY: "auto",
+                padding: 20,
+                background: "#f9fafb"
+              }}
+            >
+
               {chatMessages.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "40px 20px", color: "#888" }}>
                   <div style={{ fontSize: 40, marginBottom: 12 }}>💬</div>
                   <div style={{ fontSize: 14 }}>No messages yet.</div>
-                  <div style={{ fontSize: 13, marginTop: 4 }}>Send a message to get help from our support team.</div>
+                  <div style={{ fontSize: 13, marginTop: 4 }}>
+                    Send a message to get help from our support team.
+                  </div>
                 </div>
               ) : (
                 chatMessages.map(msg => (
-                  <div key={msg.id} style={{ 
-                    marginBottom: 16,
-                    display: "flex",
-                    justifyContent: msg.sender === "user" ? "flex-end" : "flex-start"
-                  }}>
-                    <div style={{
-                      maxWidth: "75%",
-                      background: msg.sender === "user" ? "linear-gradient(135deg, #1a2e4a, #2a4a70)" : "#fff",
-                      color: msg.sender === "user" ? "#fff" : "#1a2e4a",
-                      padding: "12px 16px",
-                      borderRadius: 12,
-                      boxShadow: "0 2px 8px rgba(0,0,0,0.1)"
-                    }}>
-                      <div style={{ fontSize: 14, lineHeight: 1.5, marginBottom: 6 }}>
-                        {msg.message}
-                      </div>
+                  <div key={msg.id} style={{ marginBottom: 18 }}>
 
-                      {msg.adminReply && (
-                        <div style={{
-                          marginTop: 8,
-                          paddingTop: 8,
-                          borderTop: "1px solid rgba(0,0,0,0.08)",
-                          fontSize: 13,
-                          color: msg.sender === "user" ? "rgba(255,255,255,0.85)" : "#666",
-                          whiteSpace: "pre-wrap"
-                        }}>
-                          <div style={{ fontWeight: 700, marginBottom: 4, color: "#b8933f" }}>
-                            Support Reply
-                          </div>
-                            {msg.adminReply}
-                          </div>
-                        )}
+                    {/* USER MESSAGE (RIGHT SIDE) */}
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "flex-end",
+                        marginBottom: msg.adminReply ? 6 : 0
+                      }}
+                    >
+                      <div
+                        style={{
+                          maxWidth: "75%",
+                          background: "linear-gradient(135deg, #1a2e4a, #2a4a70)",
+                          color: "#fff",
+                          padding: "12px 16px",
+                          borderRadius: 12,
+                          boxShadow: "0 2px 8px rgba(0,0,0,0.1)"
+                        }}
+                      >
+                        <div style={{ fontSize: 14, lineHeight: 1.5 }}>
+                          {msg.message}
+                        </div>
 
-                        <div style={{ fontSize: 11, opacity: 0.7 }}>
+                        <div style={{ fontSize: 11, opacity: 0.7, marginTop: 6 }}>
                           {fmtDate(msg.createdAt)}
                         </div>
+                      </div>
                     </div>
+
+                    {/* ADMIN REPLY (LEFT SIDE) */}
+                    {msg.adminReply && (
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "flex-start",
+                          marginTop: 6
+                        }}
+                      >
+                        <div
+                          style={{
+                            maxWidth: "75%",
+                            background: "#fff",
+                            color: "#1a2e4a",
+                            padding: "12px 16px",
+                            borderRadius: 12,
+                            border: "1px solid #eee",
+                            boxShadow: "0 2px 8px rgba(0,0,0,0.06)"
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontSize: 12,
+                              fontWeight: 700,
+                              color: "#b8933f",
+                              marginBottom: 4
+                            }}
+                          >
+                            Support Reply
+                          </div>
+
+                          <div style={{ fontSize: 14, whiteSpace: "pre-wrap" }}>
+                            {msg.adminReply}
+                          </div>
+
+                          <div style={{ fontSize: 11, opacity: 0.6, marginTop: 6 }}>
+                            {fmtDate(msg.createdAt)}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                   </div>
                 ))
               )}
+
             </div>
+
 
             {/* Chat Input */}
             <div style={{ 
