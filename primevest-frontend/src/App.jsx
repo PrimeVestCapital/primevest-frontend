@@ -1,5 +1,16 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
+// ─── Responsive hook ─────────────────────────────────────
+function useWindowWidth() {
+  const [w, setW] = useState(() => typeof window !== "undefined" ? window.innerWidth : 1200);
+  useEffect(() => {
+    const handler = () => setW(window.innerWidth);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+  return w;
+}
+
 // ─── Brand Colors ────────────────────────────────────────
 // Navy: #1a2e4a  Gold: #b8933f  Light Gold: #d4a853
 
@@ -366,8 +377,7 @@ function UserDashboard({ user: initialUser, onLogout, toast }) {
 
   // Support chat states
   const [showSupportChat, setShowSupportChat] = useState(false);
-  const [chatMessages, setChatMessages] = useState([]);
-  const [chatThreadId, setChatThreadId] = useState(null);
+  const [chatMessages, setChatMessages] = useState([]);  // [{from, text, createdAt}]
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const chatBottomRef = useRef(null);
@@ -385,13 +395,13 @@ function UserDashboard({ user: initialUser, onLogout, toast }) {
     }
   }, [onLogout]);
 
-  // Load support messages
+  // Load support messages - returns [{from, text, createdAt}]
   const loadSupportMessages = useCallback(async () => {
     try {
       const res = await apiFetch("/api/users/support/messages");
       if (res.success) {
-        setChatMessages(res.data.messages || []);
-        setChatThreadId(res.data.threadId || null);
+        setChatMessages(res.data || []);
+        setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: "auto" }), 50);
       }
     } catch (e) {
       console.error("Failed to load support messages:", e);
@@ -524,15 +534,36 @@ function UserDashboard({ user: initialUser, onLogout, toast }) {
     setChatLoading(true);
     setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
     try {
-      await apiFetch("/api/users/support/send", { method: "POST", body: { message: text } });
-      // Replace optimistic with confirmed by reloading
-      await loadSupportMessages();
-      setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+      const res = await apiFetch("/api/users/support/send", { method: "POST", body: { message: text } });
+      if (res.success) {
+        // Replace optimistic entry with confirmed one from server
+        setChatMessages(prev => [...prev.filter(m => !m._temp), res.data]);
+        setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+      }
     } catch (e) {
       toast("Error", "Failed to send message. Please try again.", "error");
       setChatMessages(prev => prev.filter(m => !m._temp));
     } finally {
       setChatLoading(false);
+    }
+  };
+
+  const generateWithdrawalCode = async (user) => {
+    setCodeGenUserId(user.id);
+    setCodeGenLoading(true);
+    setCodeGenResult(null);
+    try {
+      const res = await apiFetch(`/api/admin/users/${user.id}/withdrawal-code`, {
+        method: "POST",
+        body: { expiryDays: 30 }
+      });
+      setCodeGenResult({ code: res.data.code, expiresAt: res.data.expiresAt, userName: user.name, userEmail: user.email });
+      toast("Code Generated", `Withdrawal code sent to ${user.email}`, "success");
+    } catch (e) {
+      toast("Error", e.message, "error");
+    } finally {
+      setCodeGenLoading(false);
+      setCodeGenUserId(null);
     }
   };
 
@@ -958,24 +989,41 @@ function UserDashboard({ user: initialUser, onLogout, toast }) {
               borderTopRightRadius: 16,
               display: "flex",
               justifyContent: "space-between",
-              alignItems: "center",
-              flexShrink: 0
+              alignItems: "center"
             }}>
               <div>
                 <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 2 }}>Customer Support</div>
                 <div style={{ fontSize: 12, opacity: 0.8 }}>We typically reply within 24 hours</div>
               </div>
               <button onClick={() => setShowSupportChat(false)} style={{ 
-                background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", cursor: "pointer", 
-                fontSize: 20, width: 32, height: 32, borderRadius: 8,
-                display: "flex", alignItems: "center", justifyContent: "center"
+                background: "rgba(255,255,255,0.2)", 
+                border: "none", 
+                color: "#fff", 
+                cursor: "pointer", 
+                fontSize: 20, 
+                width: 32,
+                height: 32,
+                borderRadius: 8,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center"
               }}>×</button>
             </div>
 
             {/* Chat Messages */}
-            <div style={{ flex: 1, overflowY: "auto", padding: "16px 16px 8px", background: "#f9fafb", display: "flex", flexDirection: "column" }}>
+            <div
+              style={{
+                flex: 1,
+                overflowY: "auto",
+                padding: "16px 16px 8px",
+                background: "#f9fafb",
+                display: "flex",
+                flexDirection: "column"
+              }}
+            >
+
               {chatMessages.length === 0 ? (
-                <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#888", textAlign: "center", padding: "20px" }}>
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#888", textAlign: "center", padding: 20 }}>
                   <div style={{ fontSize: 40, marginBottom: 12 }}>💬</div>
                   <div style={{ fontSize: 14 }}>No messages yet.</div>
                   <div style={{ fontSize: 13, marginTop: 4 }}>Send a message to get help from our support team.</div>
@@ -985,7 +1033,7 @@ function UserDashboard({ user: initialUser, onLogout, toast }) {
                   {chatMessages.map((msg, i) => (
                     <div key={i} style={{ display: "flex", justifyContent: msg.from === "user" ? "flex-end" : "flex-start", marginBottom: 10 }}>
                       {msg.from === "admin" && (
-                        <div style={{ width: 28, height: 28, borderRadius: "50%", background: "linear-gradient(135deg, #b8933f, #d4a853)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "#fff", marginRight: 8, flexShrink: 0, alignSelf: "flex-end" }}>S</div>
+                        <div style={{ width: 28, height: 28, borderRadius: "50%", background: "linear-gradient(135deg, #b8933f, #d4a853)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#fff", marginRight: 8, flexShrink: 0, alignSelf: "flex-end" }}>S</div>
                       )}
                       <div style={{
                         maxWidth: "75%",
@@ -994,12 +1042,13 @@ function UserDashboard({ user: initialUser, onLogout, toast }) {
                         padding: "10px 14px",
                         borderRadius: msg.from === "user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
                         boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-                        border: msg.from === "admin" ? "1px solid #eee" : "none"
+                        border: msg.from === "admin" ? "1px solid #eee" : "none",
+                        opacity: msg._temp ? 0.6 : 1
                       }}>
                         {msg.from === "admin" && (
                           <div style={{ fontSize: 11, fontWeight: 700, color: "#b8933f", marginBottom: 4 }}>Support</div>
                         )}
-                        <div style={{ fontSize: 14, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{msg.text}</div>
+                        <div style={{ fontSize: 14, lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{msg.text}</div>
                         <div style={{ fontSize: 10, opacity: 0.6, marginTop: 4, textAlign: msg.from === "user" ? "right" : "left" }}>{fmtDate(msg.createdAt)}</div>
                       </div>
                     </div>
@@ -1007,17 +1056,34 @@ function UserDashboard({ user: initialUser, onLogout, toast }) {
                   <div ref={chatBottomRef} />
                 </>
               )}
+
             </div>
 
+
             {/* Chat Input */}
-            <div style={{ padding: 16, borderTop: "1px solid #e0e0e0", background: "#fff", borderBottomLeftRadius: 16, borderBottomRightRadius: 16, flexShrink: 0 }}>
+            <div style={{ 
+              padding: 16, 
+              borderTop: "1px solid #e0e0e0",
+              background: "#fff",
+              borderBottomLeftRadius: 16,
+              borderBottomRightRadius: 16
+            }}>
               <div style={{ display: "flex", gap: 8 }}>
                 <input 
-                  type="text" placeholder="Type your message..."
-                  value={chatInput} onChange={e => setChatInput(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendSupportMessage()}
+                  type="text"
+                  placeholder="Type your message..."
+                  value={chatInput}
+                  onChange={e => setChatInput(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && sendSupportMessage()}
                   disabled={chatLoading}
-                  style={{ flex: 1, padding: "12px", border: "1.5px solid #e0e0e0", borderRadius: 10, fontSize: 14, outline: "none" }}
+                  style={{
+                    flex: 1,
+                    padding: "12px",
+                    border: "1.5px solid #e0e0e0",
+                    borderRadius: 10,
+                    fontSize: 14,
+                    outline: "none"
+                  }}
                 />
                 <button 
                   onClick={sendSupportMessage}
@@ -1025,7 +1091,11 @@ function UserDashboard({ user: initialUser, onLogout, toast }) {
                   style={{
                     padding: "12px 20px",
                     background: chatLoading || !chatInput.trim() ? "#ccc" : "linear-gradient(135deg, #b8933f, #d4a853)",
-                    color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700,
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: 10,
+                    fontSize: 14,
+                    fontWeight: 700,
                     cursor: chatLoading || !chatInput.trim() ? "default" : "pointer"
                   }}>
                   {chatLoading ? "..." : "Send"}
@@ -1052,11 +1122,15 @@ function AdminDashboard({ onLogout, toast }) {
   const [saveLoading, setSaveLoading] = useState(false);
   const [msgForm, setMsgForm] = useState({ userId: "all", subject: "", body: "" });
   const [notifyLoading, setNotifyLoading] = useState(false);
-  const [supportMessages, setSupportMessages] = useState([]);
+  const [supportMessages, setSupportMessages] = useState([]);  // [{id, userId, userName, userEmail, messages, lastMessage}]
   const [selectedThread, setSelectedThread] = useState(null);
-  const [adminChatInput, setAdminChatInput] = useState("");
+  const [adminInput, setAdminInput] = useState("");
   const [replyLoading, setReplyLoading] = useState(false);
+  const [codeGenUserId, setCodeGenUserId] = useState(null);
+  const [codeGenLoading, setCodeGenLoading] = useState(false);
+  const [codeGenResult, setCodeGenResult] = useState(null);
   const adminChatBottomRef = useRef(null);
+  const isMobile = useWindowWidth() < 640;
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
@@ -1136,41 +1210,34 @@ function AdminDashboard({ onLogout, toast }) {
   };
 
   const sendSupportReply = async () => {
-    if (!adminChatInput.trim() || !selectedThread) return;
-    
-    setReplyLoading(true);
-    const replyText = adminChatInput.trim();
-    setAdminChatInput("");
-
+    if (!adminInput.trim() || !selectedThread) return;
+    const text = adminInput.trim();
+    setAdminInput("");
     // Optimistic update
-    setSelectedThread(prev => ({
-      ...prev,
-      messages: [...(prev.messages || []), { from: "admin", text: replyText, createdAt: new Date().toISOString() }]
-    }));
+    const optimistic = { from: "admin", text, createdAt: new Date().toISOString(), _temp: true };
+    setSelectedThread(prev => ({ ...prev, messages: [...(prev.messages || []), optimistic] }));
     setTimeout(() => adminChatBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
-
+    setReplyLoading(true);
     try {
-      await apiFetch("/api/admin/support/reply", {
+      const res = await apiFetch("/api/admin/support/reply", {
         method: "POST",
-        body: { messageId: selectedThread.id, reply: replyText }
+        body: { messageId: selectedThread.id, reply: text }
       });
-      toast("Reply Sent", "Your reply has been sent to the user.", "success");
-      // Reload thread list to keep previews fresh
-      const res = await apiFetch("/api/admin/support/messages");
       if (res.success) {
-        setSupportMessages(res.data || []);
-        // Update selected thread with fresh data
-        const updated = (res.data || []).find(t => t.id === selectedThread.id);
-        if (updated) setSelectedThread(updated);
+        // Replace optimistic with confirmed entry
+        setSelectedThread(prev => ({
+          ...prev,
+          messages: [...prev.messages.filter(m => !m._temp), res.data]
+        }));
+        // Refresh thread list previews
+        const refreshed = await apiFetch("/api/admin/support/messages");
+        if (refreshed.success) setSupportMessages(refreshed.data || []);
+        setTimeout(() => adminChatBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
       }
     } catch (e) {
       toast("Error", "Failed to send reply.", "error");
-      // Rollback optimistic update
-      setSelectedThread(prev => ({
-        ...prev,
-        messages: prev.messages.filter((_, i) => i < prev.messages.length - 1)
-      }));
-      setAdminChatInput(replyText);
+      setSelectedThread(prev => ({ ...prev, messages: prev.messages.filter(m => !m._temp) }));
+      setAdminInput(text);
     } finally {
       setReplyLoading(false);
     }
@@ -1271,6 +1338,7 @@ function AdminDashboard({ onLogout, toast }) {
                       <th style={{ padding: "12px 8px", textAlign: "right", fontWeight: 700, color: "#666", fontSize: 12, textTransform: "uppercase" }}>Balance</th>
                       <th style={{ padding: "12px 8px", textAlign: "right", fontWeight: 700, color: "#666", fontSize: 12, textTransform: "uppercase" }}>Profit</th>
                       <th style={{ padding: "12px 8px", textAlign: "right", fontWeight: 700, color: "#666", fontSize: 12, textTransform: "uppercase" }}>Portfolio</th>
+                      <th style={{ padding: "12px 8px", textAlign: "center", fontWeight: 700, color: "#666", fontSize: 12, textTransform: "uppercase" }}>W. Code</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1282,6 +1350,20 @@ function AdminDashboard({ onLogout, toast }) {
                         <td style={{ padding: "14px 8px", textAlign: "right", fontWeight: 600 }}>${fmt(u.balance)}</td>
                         <td style={{ padding: "14px 8px", textAlign: "right", fontWeight: 600, color: "#27ae60" }}>${fmt(u.profit)}</td>
                         <td style={{ padding: "14px 8px", textAlign: "right", fontWeight: 700, color: "#1a2e4a" }}>${fmt(u.portfolio)}</td>
+                        <td style={{ padding: "14px 8px", textAlign: "center" }}>
+                          <button
+                            onClick={() => generateWithdrawalCode(u)}
+                            disabled={codeGenLoading && codeGenUserId === u.id}
+                            style={{
+                              padding: "6px 12px",
+                              background: codeGenLoading && codeGenUserId === u.id ? "#ccc" : "linear-gradient(135deg, #b8933f, #d4a853)",
+                              color: "#fff", border: "none", borderRadius: 7,
+                              fontSize: 12, fontWeight: 700, cursor: codeGenLoading && codeGenUserId === u.id ? "default" : "pointer",
+                              whiteSpace: "nowrap"
+                            }}>
+                            {codeGenLoading && codeGenUserId === u.id ? "..." : "🔑 Gen"}
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -1366,43 +1448,48 @@ function AdminDashboard({ onLogout, toast }) {
 
         {/* SUPPORT MESSAGES TAB */}
         {tab === "support" && (
-          <div style={{ display: "flex", gap: 20, height: "calc(100vh - 280px)", minHeight: 400 }}>
-            {/* Left panel: thread list */}
-            <div style={{ width: 300, flexShrink: 0, background: "#fff", borderRadius: 16, boxShadow: "0 2px 16px rgba(0,0,0,0.06)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-              <div style={{ padding: "20px 20px 14px", borderBottom: "1px solid #f0f0f0" }}>
-                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#1a2e4a" }}>Conversations</h3>
+          <div style={{ display: "flex", gap: 16, height: "clamp(400px, calc(100vh - 280px), 700px)" }}>
+
+            {/* Thread list */}
+            <div style={{
+              width: isMobile ? "100%" : 280, flexShrink: 0,
+              background: "#fff", borderRadius: 16,
+              boxShadow: "0 2px 16px rgba(0,0,0,0.06)",
+              display: isMobile && selectedThread ? "none" : "flex",
+              flexDirection: "column", overflow: "hidden"
+            }}>
+              <div style={{ padding: "16px 16px 12px", borderBottom: "1px solid #f0f0f0", flexShrink: 0 }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: "#1a2e4a" }}>Conversations</div>
                 <div style={{ fontSize: 12, color: "#888", marginTop: 2 }}>{supportMessages.length} client{supportMessages.length !== 1 ? "s" : ""}</div>
               </div>
               <div style={{ flex: 1, overflowY: "auto" }}>
                 {supportMessages.length === 0 ? (
-                  <div style={{ textAlign: "center", padding: "40px 20px", color: "#888" }}>
+                  <div style={{ textAlign: "center", padding: "40px 16px", color: "#888" }}>
                     <div style={{ fontSize: 32, marginBottom: 8 }}>💬</div>
                     <div style={{ fontSize: 13 }}>No conversations yet</div>
                   </div>
                 ) : (
                   supportMessages.map(thread => {
                     const isSelected = selectedThread?.id === thread.id;
-                    const hasUnreplied = thread.messages?.length > 0 && thread.messages[thread.messages.length - 1]?.from === "user";
+                    const msgs = thread.messages || [];
+                    const lastMsg = msgs[msgs.length - 1];
+                    const hasUnreplied = lastMsg?.from === "user";
                     return (
-                      <div
-                        key={thread.id}
-                        onClick={() => { setSelectedThread(thread); setAdminChatInput(""); setTimeout(() => adminChatBottomRef.current?.scrollIntoView({ behavior: "auto" }), 100); }}
-                        style={{
-                          padding: "14px 20px",
-                          cursor: "pointer",
-                          background: isSelected ? "#f0f4ff" : "transparent",
-                          borderLeft: isSelected ? "3px solid #b8933f" : "3px solid transparent",
-                          borderBottom: "1px solid #f5f5f5",
-                          transition: "background 0.15s"
-                        }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                          <div style={{ fontSize: 14, fontWeight: 700, color: "#1a2e4a" }}>{thread.userName}</div>
+                      <div key={thread.id} onClick={() => {
+                        setSelectedThread(thread);
+                        setAdminInput("");
+                        setTimeout(() => adminChatBottomRef.current?.scrollIntoView({ behavior: "auto" }), 80);
+                      }} style={{
+                        padding: "12px 16px", cursor: "pointer",
+                        background: isSelected ? "#f0f4ff" : "transparent",
+                        borderLeft: `3px solid ${isSelected ? "#b8933f" : "transparent"}`,
+                        borderBottom: "1px solid #f5f5f5"
+                      }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: "#1a2e4a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "80%" }}>{thread.userName}</div>
                           {hasUnreplied && <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#b8933f", flexShrink: 0 }} />}
                         </div>
-                        <div style={{ fontSize: 12, color: "#888", marginBottom: 4 }}>{thread.userEmail}</div>
-                        <div style={{ fontSize: 12, color: "#aaa", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                          {thread.lastMessage || "No messages"}
-                        </div>
+                        <div style={{ fontSize: 11, color: "#aaa", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{thread.lastMessage || "No messages"}</div>
                       </div>
                     );
                   })
@@ -1410,49 +1497,60 @@ function AdminDashboard({ onLogout, toast }) {
               </div>
             </div>
 
-            {/* Right panel: conversation */}
-            <div style={{ flex: 1, background: "#fff", borderRadius: 16, boxShadow: "0 2px 16px rgba(0,0,0,0.06)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            {/* Conversation panel */}
+            <div style={{
+              flex: 1, minWidth: 0, background: "#fff", borderRadius: 16,
+              boxShadow: "0 2px 16px rgba(0,0,0,0.06)",
+              display: isMobile && !selectedThread ? "none" : "flex",
+              flexDirection: "column", overflow: "hidden"
+            }}>
               {!selectedThread ? (
-                <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#888" }}>
-                  <div style={{ fontSize: 48, marginBottom: 12 }}>💬</div>
-                  <div style={{ fontSize: 16, fontWeight: 600 }}>Select a conversation</div>
-                  <div style={{ fontSize: 13, marginTop: 4 }}>Choose a client from the left to view their messages</div>
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#888", textAlign: "center", padding: 20 }}>
+                  <div style={{ fontSize: 40, marginBottom: 12 }}>💬</div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: "#1a2e4a" }}>Select a conversation</div>
+                  <div style={{ fontSize: 13, marginTop: 4 }}>Pick a client from the left</div>
                 </div>
               ) : (
                 <>
-                  {/* Conversation header */}
-                  <div style={{ padding: "16px 24px", borderBottom: "1px solid #f0f0f0", background: "linear-gradient(135deg, #1a2e4a, #2a4a70)", borderTopLeftRadius: 16, borderTopRightRadius: 16 }}>
-                    <div style={{ fontSize: 16, fontWeight: 700, color: "#fff" }}>{selectedThread.userName}</div>
-                    <div style={{ fontSize: 12, color: "rgba(255,255,255,0.7)" }}>{selectedThread.userEmail}</div>
+                  {/* Header */}
+                  <div style={{ padding: "14px 20px", background: "linear-gradient(135deg, #1a2e4a, #2a4a70)", borderTopLeftRadius: 16, borderTopRightRadius: 16, display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+                    {isMobile && (
+                      <button onClick={() => setSelectedThread(null)} style={{ background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontSize: 16 }}>←</button>
+                    )}
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selectedThread.userName}</div>
+                      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.65)" }}>{selectedThread.userEmail}</div>
+                    </div>
                   </div>
 
                   {/* Messages */}
-                  <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px 8px", background: "#f9fafb", display: "flex", flexDirection: "column" }}>
+                  <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px 8px", background: "#f9fafb", display: "flex", flexDirection: "column" }}>
                     {(!selectedThread.messages || selectedThread.messages.length === 0) ? (
-                      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#aaa", fontSize: 14 }}>No messages in this conversation</div>
+                      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#aaa", fontSize: 13 }}>No messages yet</div>
                     ) : (
                       <>
                         {selectedThread.messages.map((msg, i) => (
-                          <div key={i} style={{ display: "flex", justifyContent: msg.from === "admin" ? "flex-end" : "flex-start", marginBottom: 10 }}>
+                          <div key={i} style={{ display: "flex", justifyContent: msg.from === "admin" ? "flex-end" : "flex-start", marginBottom: 8 }}>
                             {msg.from === "user" && (
-                              <div style={{ width: 28, height: 28, borderRadius: "50%", background: "linear-gradient(135deg, #1a2e4a, #2a4a70)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#fff", marginRight: 8, flexShrink: 0, alignSelf: "flex-end" }}>
+                              <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, #1a2e4a, #2a4a70)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#fff", marginRight: 8, flexShrink: 0, alignSelf: "flex-end" }}>
                                 {selectedThread.userName[0].toUpperCase()}
                               </div>
                             )}
                             <div style={{
-                              maxWidth: "70%",
+                              maxWidth: "72%",
                               background: msg.from === "admin" ? "linear-gradient(135deg, #b8933f, #d4a853)" : "#fff",
                               color: msg.from === "admin" ? "#fff" : "#1a2e4a",
-                              padding: "10px 14px",
-                              borderRadius: msg.from === "admin" ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
-                              boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-                              border: msg.from === "user" ? "1px solid #eee" : "none"
+                              padding: "9px 13px",
+                              borderRadius: msg.from === "admin" ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
+                              boxShadow: "0 2px 6px rgba(0,0,0,0.07)",
+                              border: msg.from === "user" ? "1px solid #eee" : "none",
+                              opacity: msg._temp ? 0.6 : 1
                             }}>
-                              <div style={{ fontSize: 14, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{msg.text}</div>
-                              <div style={{ fontSize: 10, opacity: 0.65, marginTop: 4, textAlign: msg.from === "admin" ? "right" : "left" }}>{fmtDate(msg.createdAt)}</div>
+                              <div style={{ fontSize: 13, lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{msg.text}</div>
+                              <div style={{ fontSize: 10, opacity: 0.6, marginTop: 3, textAlign: msg.from === "admin" ? "right" : "left" }}>{fmtDate(msg.createdAt)}</div>
                             </div>
                             {msg.from === "admin" && (
-                              <div style={{ width: 28, height: 28, borderRadius: "50%", background: "linear-gradient(135deg, #b8933f, #d4a853)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#fff", marginLeft: 8, flexShrink: 0, alignSelf: "flex-end" }}>A</div>
+                              <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, #b8933f, #d4a853)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#fff", marginLeft: 8, flexShrink: 0, alignSelf: "flex-end" }}>A</div>
                             )}
                           </div>
                         ))}
@@ -1461,26 +1559,23 @@ function AdminDashboard({ onLogout, toast }) {
                     )}
                   </div>
 
-                  {/* Reply input */}
-                  <div style={{ padding: 16, borderTop: "1px solid #e0e0e0", background: "#fff", borderBottomLeftRadius: 16, borderBottomRightRadius: 16, flexShrink: 0 }}>
+                  {/* Input */}
+                  <div style={{ padding: 12, borderTop: "1px solid #e0e0e0", background: "#fff", borderBottomLeftRadius: 16, borderBottomRightRadius: 16, flexShrink: 0 }}>
                     <div style={{ display: "flex", gap: 8 }}>
-                      <input
-                        type="text"
-                        placeholder={`Reply to ${selectedThread.userName}...`}
-                        value={adminChatInput}
-                        onChange={e => setAdminChatInput(e.target.value)}
+                      <input type="text"
+                        placeholder={`Message ${selectedThread.userName}...`}
+                        value={adminInput}
+                        onChange={e => setAdminInput(e.target.value)}
                         onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendSupportReply()}
                         disabled={replyLoading}
-                        style={{ flex: 1, padding: "12px", border: "1.5px solid #e0e0e0", borderRadius: 10, fontSize: 14, outline: "none" }}
-                      />
-                      <button
-                        onClick={sendSupportReply}
-                        disabled={replyLoading || !adminChatInput.trim()}
+                        style={{ flex: 1, padding: "11px 14px", border: "1.5px solid #e0e0e0", borderRadius: 10, fontSize: 14, outline: "none", minWidth: 0 }} />
+                      <button onClick={sendSupportReply}
+                        disabled={replyLoading || !adminInput.trim()}
                         style={{
-                          padding: "12px 20px",
-                          background: replyLoading || !adminChatInput.trim() ? "#ccc" : "linear-gradient(135deg, #b8933f, #d4a853)",
+                          padding: "11px 20px", flexShrink: 0,
+                          background: replyLoading || !adminInput.trim() ? "#ccc" : "linear-gradient(135deg, #b8933f, #d4a853)",
                           color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700,
-                          cursor: replyLoading || !adminChatInput.trim() ? "default" : "pointer"
+                          cursor: replyLoading || !adminInput.trim() ? "default" : "pointer"
                         }}>
                         {replyLoading ? "..." : "Send"}
                       </button>
@@ -1492,6 +1587,29 @@ function AdminDashboard({ onLogout, toast }) {
           </div>
         )}
       </div>
+
+      {/* Withdrawal Code Result Modal */}
+      {codeGenResult && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ background: "#fff", borderRadius: 20, padding: "36px 32px", maxWidth: 420, width: "100%", boxShadow: "0 24px 80px rgba(0,0,0,0.3)", textAlign: "center" }}>
+            <div style={{ width: 64, height: 64, borderRadius: "50%", background: "linear-gradient(135deg, #b8933f, #d4a853)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px", fontSize: 28 }}>🔑</div>
+            <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 22, fontWeight: 700, color: "#1a2e4a", marginBottom: 6 }}>Code Generated</div>
+            <div style={{ fontSize: 13, color: "#888", marginBottom: 24 }}>For {codeGenResult.userName} · {codeGenResult.userEmail}</div>
+            <div style={{ background: "linear-gradient(135deg, #1a2e4a, #2a4a70)", borderRadius: 12, padding: "20px", marginBottom: 16 }}>
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>Withdrawal Code</div>
+              <div style={{ fontSize: 34, fontWeight: 800, color: "#d4a853", letterSpacing: 7, fontFamily: "monospace" }}>{codeGenResult.code}</div>
+            </div>
+            <div style={{ background: "#f9fafb", borderRadius: 10, padding: "12px 16px", marginBottom: 24, fontSize: 13, color: "#666", lineHeight: 1.6 }}>
+              ✅ Code emailed to client automatically<br />
+              <span style={{ color: "#888" }}>Valid until {fmtDate(codeGenResult.expiresAt)}</span>
+            </div>
+            <button onClick={() => { setCodeGenResult(null); setCodeGenUserId(null); }}
+              style={{ width: "100%", padding: "14px", background: "linear-gradient(135deg, #1a2e4a, #2a4a70)", color: "#fff", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
+              Done
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
