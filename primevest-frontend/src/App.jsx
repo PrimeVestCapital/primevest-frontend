@@ -367,8 +367,10 @@ function UserDashboard({ user: initialUser, onLogout, toast }) {
   // Support chat states
   const [showSupportChat, setShowSupportChat] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
+  const [chatThreadId, setChatThreadId] = useState(null);
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
+  const chatBottomRef = useRef(null);
 
   // Refresh user data from API
   const refreshUser = useCallback(async () => {
@@ -384,22 +386,17 @@ function UserDashboard({ user: initialUser, onLogout, toast }) {
   }, [onLogout]);
 
   // Load support messages
-const loadSupportMessages = useCallback(async () => {
-  try {
-    const res = await apiFetch("/api/users/support/messages");
-
-    if (res.success) {
-      const normalized = (res.data || []).map(m => ({
-        ...m,
-        adminReply: m.adminReply || null
-      }));
-
-      setChatMessages(normalized);
+  const loadSupportMessages = useCallback(async () => {
+    try {
+      const res = await apiFetch("/api/users/support/messages");
+      if (res.success) {
+        setChatMessages(res.data.messages || []);
+        setChatThreadId(res.data.threadId || null);
+      }
+    } catch (e) {
+      console.error("Failed to load support messages:", e);
     }
-  } catch (e) {
-    console.error("Failed to load support messages:", e);
-  }
-}, []);
+  }, []);
 
   useEffect(() => {
     refreshUser();
@@ -520,34 +517,20 @@ const loadSupportMessages = useCallback(async () => {
 
   const sendSupportMessage = async () => {
     if (!chatInput.trim()) return;
-    
-    const tempMessage = {
-      id: Date.now(),
-      message: chatInput,
-      sender: "user",
-      createdAt: new Date().toISOString(),
-      isTemp: true
-    };
-    
-    setChatMessages(prev => [...prev, tempMessage]);
-    const messageToSend = chatInput;
+    const text = chatInput.trim();
+    const optimistic = { from: "user", text, createdAt: new Date().toISOString(), _temp: true };
+    setChatMessages(prev => [...prev, optimistic]);
     setChatInput("");
     setChatLoading(true);
-    
+    setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
     try {
-      const res = await apiFetch("/api/users/support/send", {
-        method: "POST",
-        body: { message: messageToSend }
-      });
-      
-      if (res.success) {
-        // Remove temp message and add real one
-        setChatMessages(prev => prev.filter(m => !m.isTemp).concat(res.data));
-        toast("Message Sent", "Your message has been sent to support.", "success");
-      }
+      await apiFetch("/api/users/support/send", { method: "POST", body: { message: text } });
+      // Replace optimistic with confirmed by reloading
+      await loadSupportMessages();
+      setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
     } catch (e) {
       toast("Error", "Failed to send message. Please try again.", "error");
-      setChatMessages(prev => prev.filter(m => !m.isTemp));
+      setChatMessages(prev => prev.filter(m => !m._temp));
     } finally {
       setChatLoading(false);
     }
@@ -975,150 +958,66 @@ const loadSupportMessages = useCallback(async () => {
               borderTopRightRadius: 16,
               display: "flex",
               justifyContent: "space-between",
-              alignItems: "center"
+              alignItems: "center",
+              flexShrink: 0
             }}>
               <div>
                 <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 2 }}>Customer Support</div>
                 <div style={{ fontSize: 12, opacity: 0.8 }}>We typically reply within 24 hours</div>
               </div>
               <button onClick={() => setShowSupportChat(false)} style={{ 
-                background: "rgba(255,255,255,0.2)", 
-                border: "none", 
-                color: "#fff", 
-                cursor: "pointer", 
-                fontSize: 20, 
-                width: 32,
-                height: 32,
-                borderRadius: 8,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center"
+                background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", cursor: "pointer", 
+                fontSize: 20, width: 32, height: 32, borderRadius: 8,
+                display: "flex", alignItems: "center", justifyContent: "center"
               }}>×</button>
             </div>
 
             {/* Chat Messages */}
-            <div
-              style={{
-                flex: 1,
-                overflowY: "auto",
-                padding: 20,
-                background: "#f9fafb"
-              }}
-            >
-
+            <div style={{ flex: 1, overflowY: "auto", padding: "16px 16px 8px", background: "#f9fafb", display: "flex", flexDirection: "column" }}>
               {chatMessages.length === 0 ? (
-                <div style={{ textAlign: "center", padding: "40px 20px", color: "#888" }}>
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#888", textAlign: "center", padding: "20px" }}>
                   <div style={{ fontSize: 40, marginBottom: 12 }}>💬</div>
                   <div style={{ fontSize: 14 }}>No messages yet.</div>
-                  <div style={{ fontSize: 13, marginTop: 4 }}>
-                    Send a message to get help from our support team.
-                  </div>
+                  <div style={{ fontSize: 13, marginTop: 4 }}>Send a message to get help from our support team.</div>
                 </div>
               ) : (
-                chatMessages.map(msg => (
-                  <div key={msg.id} style={{ marginBottom: 18 }}>
-
-                    {/* USER MESSAGE (RIGHT SIDE) */}
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "flex-end",
-                        marginBottom: msg.adminReply ? 6 : 0
-                      }}
-                    >
-                      <div
-                        style={{
-                          maxWidth: "75%",
-                          background: "linear-gradient(135deg, #1a2e4a, #2a4a70)",
-                          color: "#fff",
-                          padding: "12px 16px",
-                          borderRadius: 12,
-                          boxShadow: "0 2px 8px rgba(0,0,0,0.1)"
-                        }}
-                      >
-                        <div style={{ fontSize: 14, lineHeight: 1.5 }}>
-                          {msg.message}
-                        </div>
-
-                        <div style={{ fontSize: 11, opacity: 0.7, marginTop: 6 }}>
-                          {fmtDate(msg.createdAt)}
-                        </div>
+                <>
+                  {chatMessages.map((msg, i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: msg.from === "user" ? "flex-end" : "flex-start", marginBottom: 10 }}>
+                      {msg.from === "admin" && (
+                        <div style={{ width: 28, height: 28, borderRadius: "50%", background: "linear-gradient(135deg, #b8933f, #d4a853)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "#fff", marginRight: 8, flexShrink: 0, alignSelf: "flex-end" }}>S</div>
+                      )}
+                      <div style={{
+                        maxWidth: "75%",
+                        background: msg.from === "user" ? "linear-gradient(135deg, #1a2e4a, #2a4a70)" : "#fff",
+                        color: msg.from === "user" ? "#fff" : "#1a2e4a",
+                        padding: "10px 14px",
+                        borderRadius: msg.from === "user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
+                        boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+                        border: msg.from === "admin" ? "1px solid #eee" : "none"
+                      }}>
+                        {msg.from === "admin" && (
+                          <div style={{ fontSize: 11, fontWeight: 700, color: "#b8933f", marginBottom: 4 }}>Support</div>
+                        )}
+                        <div style={{ fontSize: 14, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{msg.text}</div>
+                        <div style={{ fontSize: 10, opacity: 0.6, marginTop: 4, textAlign: msg.from === "user" ? "right" : "left" }}>{fmtDate(msg.createdAt)}</div>
                       </div>
                     </div>
-
-                    {/* ADMIN REPLY (LEFT SIDE) */}
-                    {msg.adminReply && (
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "flex-start",
-                          marginTop: 6
-                        }}
-                      >
-                        <div
-                          style={{
-                            maxWidth: "75%",
-                            background: "#fff",
-                            color: "#1a2e4a",
-                            padding: "12px 16px",
-                            borderRadius: 12,
-                            border: "1px solid #eee",
-                            boxShadow: "0 2px 8px rgba(0,0,0,0.06)"
-                          }}
-                        >
-                          <div
-                            style={{
-                              fontSize: 12,
-                              fontWeight: 700,
-                              color: "#b8933f",
-                              marginBottom: 4
-                            }}
-                          >
-                            Support Reply
-                          </div>
-
-                          <div style={{ fontSize: 14, whiteSpace: "pre-wrap" }}>
-                            {msg.adminReply}
-                          </div>
-
-                          <div style={{ fontSize: 11, opacity: 0.6, marginTop: 6 }}>
-                            {fmtDate(msg.createdAt)}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                  </div>
-                ))
+                  ))}
+                  <div ref={chatBottomRef} />
+                </>
               )}
-
             </div>
 
-
             {/* Chat Input */}
-            <div style={{ 
-              padding: 16, 
-              borderTop: "1px solid #e0e0e0",
-              background: "#fff",
-              borderBottomLeftRadius: 16,
-              borderBottomRightRadius: 16
-            }}>
+            <div style={{ padding: 16, borderTop: "1px solid #e0e0e0", background: "#fff", borderBottomLeftRadius: 16, borderBottomRightRadius: 16, flexShrink: 0 }}>
               <div style={{ display: "flex", gap: 8 }}>
                 <input 
-                  type="text"
-                  placeholder="Type your message..."
-                  value={chatInput}
-                  onChange={e => setChatInput(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && sendSupportMessage()}
+                  type="text" placeholder="Type your message..."
+                  value={chatInput} onChange={e => setChatInput(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendSupportMessage()}
                   disabled={chatLoading}
-                  style={{
-                    flex: 1,
-                    padding: "12px",
-                    border: "1.5px solid #e0e0e0",
-                    borderRadius: 10,
-                    fontSize: 14,
-                    outline: "none"
-                  }}
+                  style={{ flex: 1, padding: "12px", border: "1.5px solid #e0e0e0", borderRadius: 10, fontSize: 14, outline: "none" }}
                 />
                 <button 
                   onClick={sendSupportMessage}
@@ -1126,11 +1025,7 @@ const loadSupportMessages = useCallback(async () => {
                   style={{
                     padding: "12px 20px",
                     background: chatLoading || !chatInput.trim() ? "#ccc" : "linear-gradient(135deg, #b8933f, #d4a853)",
-                    color: "#fff",
-                    border: "none",
-                    borderRadius: 10,
-                    fontSize: 14,
-                    fontWeight: 700,
+                    color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700,
                     cursor: chatLoading || !chatInput.trim() ? "default" : "pointer"
                   }}>
                   {chatLoading ? "..." : "Send"}
@@ -1158,9 +1053,10 @@ function AdminDashboard({ onLogout, toast }) {
   const [msgForm, setMsgForm] = useState({ userId: "all", subject: "", body: "" });
   const [notifyLoading, setNotifyLoading] = useState(false);
   const [supportMessages, setSupportMessages] = useState([]);
-  const [selectedSupport, setSelectedSupport] = useState(null);
-  const [supportReply, setSupportReply] = useState("");
+  const [selectedThread, setSelectedThread] = useState(null);
+  const [adminChatInput, setAdminChatInput] = useState("");
   const [replyLoading, setReplyLoading] = useState(false);
+  const adminChatBottomRef = useRef(null);
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
@@ -1240,26 +1136,41 @@ function AdminDashboard({ onLogout, toast }) {
   };
 
   const sendSupportReply = async () => {
-    if (!supportReply.trim() || !selectedSupport) return;
+    if (!adminChatInput.trim() || !selectedThread) return;
     
     setReplyLoading(true);
+    const replyText = adminChatInput.trim();
+    setAdminChatInput("");
+
+    // Optimistic update
+    setSelectedThread(prev => ({
+      ...prev,
+      messages: [...(prev.messages || []), { from: "admin", text: replyText, createdAt: new Date().toISOString() }]
+    }));
+    setTimeout(() => adminChatBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+
     try {
-      const res = await apiFetch("/api/admin/support/reply", {
+      await apiFetch("/api/admin/support/reply", {
         method: "POST",
-        body: {
-          messageId: selectedSupport.id,
-          reply: supportReply
-        }
+        body: { messageId: selectedThread.id, reply: replyText }
       });
-      
+      toast("Reply Sent", "Your reply has been sent to the user.", "success");
+      // Reload thread list to keep previews fresh
+      const res = await apiFetch("/api/admin/support/messages");
       if (res.success) {
-        toast("Reply Sent", "Your reply has been sent to the user.", "success");
-        setSupportReply("");
-        setSelectedSupport(null);
-        loadSupportMessages();
+        setSupportMessages(res.data || []);
+        // Update selected thread with fresh data
+        const updated = (res.data || []).find(t => t.id === selectedThread.id);
+        if (updated) setSelectedThread(updated);
       }
     } catch (e) {
       toast("Error", "Failed to send reply.", "error");
+      // Rollback optimistic update
+      setSelectedThread(prev => ({
+        ...prev,
+        messages: prev.messages.filter((_, i) => i < prev.messages.length - 1)
+      }));
+      setAdminChatInput(replyText);
     } finally {
       setReplyLoading(false);
     }
@@ -1455,139 +1366,132 @@ function AdminDashboard({ onLogout, toast }) {
 
         {/* SUPPORT MESSAGES TAB */}
         {tab === "support" && (
-          <div style={{ maxWidth: 800 }}>
-            <h3 style={{ margin: "0 0 20px", color: "#1a2e4a", fontFamily: "'Playfair Display', serif" }}>Support Messages</h3>
-            <div style={cardStyle()}>
-              {supportMessages.length === 0 ? (
-                <div style={{ textAlign: "center", padding: "40px 20px", color: "#888" }}>
+          <div style={{ display: "flex", gap: 20, height: "calc(100vh - 280px)", minHeight: 400 }}>
+            {/* Left panel: thread list */}
+            <div style={{ width: 300, flexShrink: 0, background: "#fff", borderRadius: 16, boxShadow: "0 2px 16px rgba(0,0,0,0.06)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+              <div style={{ padding: "20px 20px 14px", borderBottom: "1px solid #f0f0f0" }}>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#1a2e4a" }}>Conversations</h3>
+                <div style={{ fontSize: 12, color: "#888", marginTop: 2 }}>{supportMessages.length} client{supportMessages.length !== 1 ? "s" : ""}</div>
+              </div>
+              <div style={{ flex: 1, overflowY: "auto" }}>
+                {supportMessages.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: "40px 20px", color: "#888" }}>
+                    <div style={{ fontSize: 32, marginBottom: 8 }}>💬</div>
+                    <div style={{ fontSize: 13 }}>No conversations yet</div>
+                  </div>
+                ) : (
+                  supportMessages.map(thread => {
+                    const isSelected = selectedThread?.id === thread.id;
+                    const hasUnreplied = thread.messages?.length > 0 && thread.messages[thread.messages.length - 1]?.from === "user";
+                    return (
+                      <div
+                        key={thread.id}
+                        onClick={() => { setSelectedThread(thread); setAdminChatInput(""); setTimeout(() => adminChatBottomRef.current?.scrollIntoView({ behavior: "auto" }), 100); }}
+                        style={{
+                          padding: "14px 20px",
+                          cursor: "pointer",
+                          background: isSelected ? "#f0f4ff" : "transparent",
+                          borderLeft: isSelected ? "3px solid #b8933f" : "3px solid transparent",
+                          borderBottom: "1px solid #f5f5f5",
+                          transition: "background 0.15s"
+                        }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: "#1a2e4a" }}>{thread.userName}</div>
+                          {hasUnreplied && <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#b8933f", flexShrink: 0 }} />}
+                        </div>
+                        <div style={{ fontSize: 12, color: "#888", marginBottom: 4 }}>{thread.userEmail}</div>
+                        <div style={{ fontSize: 12, color: "#aaa", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {thread.lastMessage || "No messages"}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* Right panel: conversation */}
+            <div style={{ flex: 1, background: "#fff", borderRadius: 16, boxShadow: "0 2px 16px rgba(0,0,0,0.06)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+              {!selectedThread ? (
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#888" }}>
                   <div style={{ fontSize: 48, marginBottom: 12 }}>💬</div>
-                  <div style={{ fontSize: 16 }}>No support messages yet</div>
+                  <div style={{ fontSize: 16, fontWeight: 600 }}>Select a conversation</div>
+                  <div style={{ fontSize: 13, marginTop: 4 }}>Choose a client from the left to view their messages</div>
                 </div>
               ) : (
-                supportMessages.map(msg => (
-                  <div key={msg.id} style={{ 
-                    padding: "16px", 
-                    marginBottom: 12, 
-                    background: msg.adminReply ? "#f9fafb" : "#fff8e1", 
-                    borderRadius: 10,
-                    border: msg.adminReply ? "1px solid #e0e0e0" : "1px solid #ffe082"
-                  }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 8 }}>
-                      <div>
-                        <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 2 }}>{msg.userName}</div>
-                        <div style={{ fontSize: 12, color: "#888" }}>{msg.userEmail}</div>
-                      </div>
-                      <div style={{ fontSize: 11, color: "#888" }}>{fmtDate(msg.createdAt)}</div>
-                    </div>
-                    <div style={{ fontSize: 14, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
-                      {msg.message}
-                    </div>
-                    {msg.adminReply && (
-                      <div style={{
-                        marginTop: 10,
-                        padding: "10px 12px",
-                        borderRadius: 10,
-                        background: "rgba(184,147,63,0.08)",
-                        border: "1px solid rgba(184,147,63,0.25)",
-                        fontSize: 13,
-                        whiteSpace: "pre-wrap"
-                      }}>
-                        <div style={{ 
-                          fontWeight: 700, 
-                          marginBottom: 6, 
-                          color: "#b8933f",
-                          fontSize: 12,
-                          textTransform: "uppercase",
-                          letterSpacing: 0.5
-                        }}>
-                          Support Reply
-                        </div>
-                        {msg.adminReply}
-                      </div>
-                    )}
-                    {!msg.adminReply && (
-                      <button 
-                        onClick={() => setSelectedSupport(msg)}
-                        style={{
-                          marginTop: 12,
-                          padding: "8px 16px",
-                          background: "linear-gradient(135deg, #1a2e4a, #2a4a70)",
-                          color: "#fff",
-                          border: "none",
-                          borderRadius: 8,
-                          fontSize: 13,
-                          fontWeight: 600,
-                          cursor: "pointer"
-                        }}>
-                        Reply
-                      </button>
+                <>
+                  {/* Conversation header */}
+                  <div style={{ padding: "16px 24px", borderBottom: "1px solid #f0f0f0", background: "linear-gradient(135deg, #1a2e4a, #2a4a70)", borderTopLeftRadius: 16, borderTopRightRadius: 16 }}>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: "#fff" }}>{selectedThread.userName}</div>
+                    <div style={{ fontSize: 12, color: "rgba(255,255,255,0.7)" }}>{selectedThread.userEmail}</div>
+                  </div>
+
+                  {/* Messages */}
+                  <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px 8px", background: "#f9fafb", display: "flex", flexDirection: "column" }}>
+                    {(!selectedThread.messages || selectedThread.messages.length === 0) ? (
+                      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#aaa", fontSize: 14 }}>No messages in this conversation</div>
+                    ) : (
+                      <>
+                        {selectedThread.messages.map((msg, i) => (
+                          <div key={i} style={{ display: "flex", justifyContent: msg.from === "admin" ? "flex-end" : "flex-start", marginBottom: 10 }}>
+                            {msg.from === "user" && (
+                              <div style={{ width: 28, height: 28, borderRadius: "50%", background: "linear-gradient(135deg, #1a2e4a, #2a4a70)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#fff", marginRight: 8, flexShrink: 0, alignSelf: "flex-end" }}>
+                                {selectedThread.userName[0].toUpperCase()}
+                              </div>
+                            )}
+                            <div style={{
+                              maxWidth: "70%",
+                              background: msg.from === "admin" ? "linear-gradient(135deg, #b8933f, #d4a853)" : "#fff",
+                              color: msg.from === "admin" ? "#fff" : "#1a2e4a",
+                              padding: "10px 14px",
+                              borderRadius: msg.from === "admin" ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
+                              boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+                              border: msg.from === "user" ? "1px solid #eee" : "none"
+                            }}>
+                              <div style={{ fontSize: 14, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{msg.text}</div>
+                              <div style={{ fontSize: 10, opacity: 0.65, marginTop: 4, textAlign: msg.from === "admin" ? "right" : "left" }}>{fmtDate(msg.createdAt)}</div>
+                            </div>
+                            {msg.from === "admin" && (
+                              <div style={{ width: 28, height: 28, borderRadius: "50%", background: "linear-gradient(135deg, #b8933f, #d4a853)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#fff", marginLeft: 8, flexShrink: 0, alignSelf: "flex-end" }}>A</div>
+                            )}
+                          </div>
+                        ))}
+                        <div ref={adminChatBottomRef} />
+                      </>
                     )}
                   </div>
-                ))
+
+                  {/* Reply input */}
+                  <div style={{ padding: 16, borderTop: "1px solid #e0e0e0", background: "#fff", borderBottomLeftRadius: 16, borderBottomRightRadius: 16, flexShrink: 0 }}>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <input
+                        type="text"
+                        placeholder={`Reply to ${selectedThread.userName}...`}
+                        value={adminChatInput}
+                        onChange={e => setAdminChatInput(e.target.value)}
+                        onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendSupportReply()}
+                        disabled={replyLoading}
+                        style={{ flex: 1, padding: "12px", border: "1.5px solid #e0e0e0", borderRadius: 10, fontSize: 14, outline: "none" }}
+                      />
+                      <button
+                        onClick={sendSupportReply}
+                        disabled={replyLoading || !adminChatInput.trim()}
+                        style={{
+                          padding: "12px 20px",
+                          background: replyLoading || !adminChatInput.trim() ? "#ccc" : "linear-gradient(135deg, #b8933f, #d4a853)",
+                          color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700,
+                          cursor: replyLoading || !adminChatInput.trim() ? "default" : "pointer"
+                        }}>
+                        {replyLoading ? "..." : "Send"}
+                      </button>
+                    </div>
+                  </div>
+                </>
               )}
             </div>
           </div>
         )}
       </div>
-
-      {/* Support Reply Modal */}
-      {selectedSupport && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-          <div style={{ background: "#fff", borderRadius: 20, padding: "32px", maxWidth: 500, width: "100%", boxShadow: "0 24px 80px rgba(0,0,0,0.3)" }}>
-            <h3 style={{ margin: "0 0 20px", fontSize: 20, fontWeight: 700, color: "#1a2e4a" }}>Reply to {selectedSupport.userName}</h3>
-            
-            <div style={{ background: "#f9fafb", borderRadius: 10, padding: "16px", marginBottom: 20 }}>
-              <div style={{ fontSize: 13, color: "#666", marginBottom: 8 }}>User's Message:</div>
-              <div style={{ fontSize: 14, color: "#1a2e4a" }}>{selectedSupport.message}</div>
-            </div>
-
-            <div style={{ marginBottom: 20 }}>
-              <label style={{ fontSize: 12, fontWeight: 700, color: "#666", textTransform: "uppercase", letterSpacing: 1, display: "block", marginBottom: 8 }}>Your Reply</label>
-              <textarea 
-                placeholder="Type your reply here..."
-                value={supportReply}
-                onChange={e => setSupportReply(e.target.value)}
-                style={{ ...inputStyle, height: 120, resize: "vertical" }}
-              />
-            </div>
-
-            <div style={{ display: "flex", gap: 12 }}>
-              <button 
-                onClick={() => { setSelectedSupport(null); setSupportReply(""); }}
-                disabled={replyLoading}
-                style={{ 
-                  flex: 1, 
-                  padding: "14px", 
-                  background: "#f5f5f5", 
-                  color: "#666", 
-                  border: "none", 
-                  borderRadius: 10, 
-                  fontSize: 14, 
-                  fontWeight: 700, 
-                  cursor: "pointer" 
-                }}>
-                Cancel
-              </button>
-              <button 
-                onClick={sendSupportReply}
-                disabled={replyLoading || !supportReply.trim()}
-                style={{ 
-                  flex: 1, 
-                  padding: "14px", 
-                  background: replyLoading || !supportReply.trim() ? "#ccc" : "linear-gradient(135deg, #b8933f, #d4a853)", 
-                  color: "#fff", 
-                  border: "none", 
-                  borderRadius: 10, 
-                  fontSize: 14, 
-                  fontWeight: 700, 
-                  cursor: replyLoading || !supportReply.trim() ? "default" : "pointer" 
-                }}>
-                {replyLoading ? "Sending..." : "Send Reply"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
